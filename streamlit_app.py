@@ -29,13 +29,13 @@ STATIC_DIR = APP_DIR / "static"
 FAVICON_PATH = STATIC_DIR / "snowflake-bug-logo.png"
 
 st.set_page_config(
-    page_title="Data Lakeview",
+    page_title="Data Lake Explorer",
     page_icon=str(FAVICON_PATH),
     layout="wide",
     initial_sidebar_state="collapsed",
     menu_items={
         "Get Help": "https://developers.snowflake.com",
-        "About": "Data Lakeview - Full visibility into your Snowflake data access. "
+        "About": "Data Lake Explorer - Full visibility into your Snowflake data access. "
         "Built with Snowpark for Python and Streamlit.",
     },
 )
@@ -1018,7 +1018,7 @@ def render_network_section(df: pd.DataFrame, network_html: str) -> None:
     if st.session_state.get("full_screen_mode", False):
         title_col, button_col = st.columns([9, 1])
         with title_col:
-            st.markdown('<div class="network-title">Data Lakeview - Full Screen View</div>', unsafe_allow_html=True)
+            st.markdown('<div class="network-title">Data Lake Explorer - Full Screen View</div>', unsafe_allow_html=True)
         with button_col:
             if st.button("⊞", help="Return to Split View"):
                 st.session_state["full_screen_mode"] = False
@@ -1031,7 +1031,7 @@ def render_network_section(df: pd.DataFrame, network_html: str) -> None:
     with col1:
         title_col, button_col = st.columns([9, 1])
         with title_col:
-            st.markdown('<div class="network-title">Data Lakeview</div>', unsafe_allow_html=True)
+            st.markdown('<div class="network-title">Data Lake Explorer</div>', unsafe_allow_html=True)
         with button_col:
             if st.button("⛶", help="Full Screen"):
                 st.session_state["full_screen_mode"] = True

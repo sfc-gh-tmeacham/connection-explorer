@@ -1,4 +1,4 @@
-# Data Lakeview
+# Data Lake Explorer
 
 **Full visibility into your Snowflake data access** — A Streamlit application that visualizes database and warehouse access patterns using interactive network graphs powered by Snowflake Horizon Catalog.
 
@@ -30,8 +30,8 @@ The app displays:
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/data-lakeview.git
-cd data-lakeview
+git clone https://github.com/sfc-gh-mfulkerson/data-lake-explorer.git
+cd data-lake-explorer
 
 # Create virtual environment
 python -m venv venv
@@ -45,8 +45,8 @@ pip install -r requirements.txt
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/data-lakeview.git
-cd data-lakeview
+git clone https://github.com/sfc-gh-mfulkerson/data-lake-explorer.git
+cd data-lake-explorer
 
 # Create conda environment
 conda env create -f environment.yml
@@ -76,7 +76,7 @@ The app will open in your browser at `http://localhost:8501`
 ```yaml
 definition_version: 1
 streamlit:
-  name: DATA_LAKEVIEW
+  name: DATA_LAKE_EXPLORER
   stage: YOUR_DB.YOUR_SCHEMA.YOUR_STAGE
   main_file: streamlit_app.py
   query_warehouse: YOUR_WAREHOUSE
@@ -102,7 +102,7 @@ snow streamlit deploy
 ## Project Structure
 
 ```
-data-lakeview/
+data-lake-explorer/
 ├── streamlit_app.py      # Main Streamlit application
 ├── static/               # Static assets (images)
 │   ├── snowflake-bug-logo.png

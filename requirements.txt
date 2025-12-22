@@ -1,4 +1,4 @@
-# Data Lakeview - Snowflake Data Access Visualization
+# Data Lake Explorer - Snowflake Data Access Visualization
 # Python 3.11+ recommended
 
 # Core Streamlit framework

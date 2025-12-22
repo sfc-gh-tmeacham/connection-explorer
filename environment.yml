@@ -1,15 +1,10 @@
-name: data-lakeview
+name: streamlit-medtronic
 channels:
-  - conda-forge
-  - defaults
 dependencies:
-  - python=3.11
   - streamlit
   - pandas
   - altair
   - pillow
   - pyvis
   - networkx
-  - pip
-  - pip:
-    - snowflake-snowpark-python
+  - snowflake-snowpark-python
