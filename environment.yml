@@ -1,4 +1,4 @@
-name: streamlit-medtronic
+name: streamlit-data-lake-explorer
 channels:
 dependencies:
   - streamlit
