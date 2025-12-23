@@ -137,7 +137,7 @@ CUSTOM_CSS = """
         .stColumn > div {
             padding-top: 0rem !important;
         }
-        .network-title, .page-title {
+        .network-title {
             font-family: 'Lato', -apple-system, BlinkMacSystemFont, sans-serif !important;
             font-weight: 900 !important;
             font-size: 18px !important;
@@ -148,9 +148,6 @@ CUSTOM_CSS = """
             text-align: left !important;
             line-height: 1.2 !important;
             display: block !important;
-        }
-        .page-title {
-            margin-bottom: 0.5rem !important;
         }
         iframe[title="streamlit_components_v1.components_v1_html"] {
             margin-top: -1rem !important;
@@ -168,9 +165,6 @@ CUSTOM_CSS = """
 
         .stMarkdown {
             margin-bottom: 0 !important;
-        }
-        .title-container {
-            margin-bottom: 0.25rem !important;
         }
         .network-title + div {
             margin-top: -2rem !important;
@@ -239,6 +233,43 @@ CUSTOM_CSS = """
         .stSidebar h1, .stSidebar h2, .stSidebar h3 {
             text-align: left !important;
         }
+        
+        /* Full screen mode styles - hide EVERYTHING except the network */
+        .fullscreen-mode header[data-testid="stHeader"],
+        .fullscreen-mode [data-testid="stSidebar"],
+        .fullscreen-mode [data-testid="stToolbar"],
+        .fullscreen-mode [data-testid="stDecoration"],
+        .fullscreen-mode [data-testid="stStatusWidget"],
+        .fullscreen-mode .stDeployButton,
+        .fullscreen-mode footer,
+        .fullscreen-mode #MainMenu,
+        .fullscreen-mode .stAppHeader,
+        .fullscreen-mode [data-testid="stAppViewBlockContainer"] > div:not(:has(iframe)),
+        .fullscreen-mode [data-testid="stVerticalBlock"] > div:not(:has(iframe)):not(:has(button)) {
+            display: none !important;
+            visibility: hidden !important;
+        }
+        .fullscreen-mode,
+        .fullscreen-mode .stApp,
+        .fullscreen-mode .stAppViewContainer,
+        .fullscreen-mode .stMain,
+        .fullscreen-mode [data-testid="stAppViewBlockContainer"],
+        .fullscreen-mode .stMainBlockContainer,
+        .fullscreen-mode div.block-container,
+        .fullscreen-mode [data-testid="stVerticalBlock"] {
+            padding: 0 !important;
+            margin: 0 !important;
+            max-width: 100vw !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            overflow: hidden !important;
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+        }
+        .st-emotion-cache-wfksaw {
+            gap: 0rem !important;
+        }
     </style>
     """
 
@@ -251,19 +282,26 @@ def load_snowflake_logo() -> str:
 
 
 def render_snowflake_header() -> None:
-    """Render Snowflake branded header with bug logo and Horizon Catalog text."""
+    """Render header with Data Lake Explorer as main title and Horizon Catalog as subheader."""
     logo_b64 = load_snowflake_logo()
     
-    # Left-justified header with logo and text aligned
-    # Added left padding to avoid overlap with sidebar toggle arrows
+    # Main header: Data Lake Explorer in black
+    # Subheader: Snowflake logo + Horizon Catalog in 18pt Snowflake blue
     st.markdown(
         f'''
-        <div style="display: flex; align-items: center; gap: 12px; padding: 0.25rem 0; padding-left: 50px;">
-            <img src="data:image/png;base64,{logo_b64}" width="50" height="50" style="display: block;">
-            <span style="font-family: Lato, sans-serif; font-size: 32px; font-weight: 900; 
-                         color: #249EDD; letter-spacing: 0.02em; line-height: 1;">
-                Horizon Catalog
-            </span>
+        <div style="padding: 0.25rem 0; padding-left: 50px;">
+            <h1 style="font-family: Lato, sans-serif; font-size: 32px; font-weight: 900; 
+                       color: #000000; letter-spacing: 0.02em; line-height: 1.2; 
+                       margin: 0; padding: 0; text-align: left;">
+                Data Lake Explorer
+            </h1>
+            <div style="display: flex; align-items: center; gap: 8px; margin-top: 8px;">
+                <img src="data:image/png;base64,{logo_b64}" width="24" height="24" style="display: block;">
+                <span style="font-family: Lato, sans-serif; font-size: 18px; font-weight: 700; 
+                             color: {SNOWFLAKE_BLUE}; letter-spacing: 0.02em; line-height: 1;">
+                    Horizon Catalog
+                </span>
+            </div>
         </div>
         ''',
         unsafe_allow_html=True
@@ -346,115 +384,12 @@ def load_data() -> pd.DataFrame:
         return sample_dataframe()
     try:
         query = """
-        WITH client_mappings AS (
-            -- Maintainable lookup for application name patterns -> friendly client names
-            -- Order matters: more specific patterns should come before general ones
-            SELECT column1 AS pattern, column2 AS client_name FROM VALUES
-                ('snowpark', 'Snowpark'),
-                ('deployments', 'Kafka'),
-                ('cosmos', 'COSMOS'),
-                ('rappid', 'RAPPID'),
-                ('dtlk', 'DTLK'),
-                ('nice', 'NICE'),
-                ('nexis', 'NEXIS'),
-                ('mashup', 'Power BI'),
-                ('powerbi', 'Power BI'),
-                ('grafana', 'Grafana'),
-                ('cirrus', 'Cirrus CI'),
-                ('toad', 'Toad'),
-                ('syniti', 'Syniti Replication'),
-                ('wherescapered', 'WhereScape RED'),
-                ('powershell', 'MS PowerShell'),
-                ('bootstrap', 'Tomcat'),
-                ('qlikrepl', 'Qlik Replicate'),
-                ('rstudio', 'RStudio'),
-                ('microstrat', 'MicroStrategy'),
-                ('tableau', 'Tableau'),
-                ('hyperion', 'Hyperion'),
-                ('softoffice', 'Microsoft Office'),
-                ('msacces', 'Microsoft Access'),
-                ('databricks', 'Databricks/Spark'),
-                ('dbatch', 'Databricks/Spark'),
-                ('spark', 'Databricks/Spark'),
-                ('dtexec', 'SSIS'),
-                ('dts', 'SSIS'),
-                ('alteryx', 'Alteryx'),
-                ('cdata', 'CData'),
-                ('reportserver', 'SSRS/PBIRS'),
-                ('msrs', 'SSRS/PBIRS'),
-                ('reportingservice', 'SSRS/PBIRS'),
-                ('reportbuilder', 'SSRS/PBIRS'),
-                ('visualstudio', 'SSRS/PBIRS'),
-                ('sqlse', 'SQL Server'),
-                ('perl', 'Perl'),
-                ('iis', 'Microsoft IIS'),
-                ('inets', 'Microsoft IIS'),
-                ('businessobjects', 'BOBJ'),
-                ('domo', 'Domo'),
-                ('datafactory', 'Azure Data Factory'),
-                ('integrationruntime', 'Azure Data Factory'),
-                ('excel', 'Excel'),
-                ('snowflake', 'Snowflake Web'),
-                ('jarvis', 'Jarvis'),
-                ('webjobs', 'Azure WebJobs'),
-                ('jenkins', 'Jenkins'),
-                ('kafka', 'Kafka'),
-                ('airflow', 'Airflow'),
-                ('starburst', 'Starburst'),
-                ('prest', 'Presto'),
-                ('boomi', 'Boomi'),
-                ('sas', 'SAS'),
-                ('arcgis', 'ArcGIS'),
-                ('dbeave', 'DBeaver'),
-                ('vscode', 'VSCode'),
-                ('teradata', 'Teradata'),
-                ('fads', 'Fads'),
-                ('nimbus', 'Nimbus'),
-                ('advancedquery', 'AdvancedQueryTool'),
-                ('jdbc', 'JDBC'),
-                ('python', 'Python')
-        ),
-        
-        raw_access AS (
-            SELECT
-                s.client_application_id,
-                PARSE_JSON(s.client_environment):APPLICATION::VARCHAR AS application,
-                q.warehouse_name AS warehouse,
-                q.query_type,
-                q.query_id,
-                SPLIT_PART(t.VALUE:objectName::VARCHAR, '.', 1) AS database
-            FROM snowflake.account_usage.sessions s
-            INNER JOIN snowflake.account_usage.query_history q 
-                ON q.session_id = s.session_id
-            INNER JOIN snowflake.account_usage.access_history a 
-                ON q.query_id = a.query_id,
-            TABLE(FLATTEN(a.direct_objects_accessed)) t
-            WHERE q.start_time > DATEADD(day, -7, CURRENT_DATE())
-                AND q.query_type != 'CALL'
-                AND s.client_application_id NOT LIKE 'SYSTEM%'
-        )
-        
-        SELECT
-            CURRENT_ORGANIZATION_NAME() AS organization_name,
-            CURRENT_ACCOUNT() AS account_name,
-            COALESCE(cm.client_name, r.application, r.client_application_id) AS client,
-            r.warehouse,
-            r.database,
-            CASE
-                WHEN r.query_type LIKE 'CREATE%' THEN 'DDL'
-                WHEN r.query_type IN ('SELECT', 'UNLOAD', 'GET_FILES') THEN 'read'
-                ELSE 'write'
-            END AS direction,
-            COUNT(DISTINCT r.query_id) AS access_count
-        FROM raw_access r
-        LEFT JOIN client_mappings cm 
-            ON LOWER(r.application) LIKE '%' || cm.pattern || '%'
-        GROUP BY ALL
+            select 'MDTPLC' as ACCOUNT_NAME, * from data_lake_access_30d order by access_count desc;
         """
  
         result_df = session.sql(query).to_pandas()
         if result_df.empty:
-            st.warning("No data found for the last 7 days. Using sample data.")
+            st.warning("No data found. Using sample data.")
             return sample_dataframe()
         return result_df
     except Exception as exc:
@@ -559,23 +494,22 @@ def apply_filters(df: pd.DataFrame, database_name: str, warehouse_name: str,
         filtered = filtered.query(" & ".join(query_parts))
     return filtered
 
-def build_network_html(df: pd.DataFrame, _node_images: Dict[str, str], dark_mode: bool = False) -> str:
-    """Build network visualization HTML for either light or dark mode."""
+def build_network_html(df: pd.DataFrame, _node_images: Dict[str, str], fullscreen: bool = False) -> str:
+    """Build network visualization HTML."""
     if df.empty:
         return "<p style='color: inherit;'>No rows available to render.</p>"
 
     current_account = get_current_account()
 
-    # Set colors based on mode
-    if dark_mode:
-        bg_color = "#0e1117"  # Streamlit dark theme background
-        font_color = "#fafafa"
-    else:
-        bg_color = "#ffffff"
-        font_color = "#000000"
+    # Default colors (will be overridden by theme-aware JavaScript)
+    bg_color = "#ffffff"
+    font_color = "#000000"
+
+    # Use 100% height for fullscreen mode
+    network_height = "100vh" if fullscreen else "680px"
 
     net = Network(
-        height="680px",
+        height=network_height,
         width="100%",
         bgcolor=bg_color,
         font_color=font_color,
@@ -632,14 +566,14 @@ def build_network_html(df: pd.DataFrame, _node_images: Dict[str, str], dark_mode
         org_name = row["ORGANIZATION_NAME"]
         client = row["CLIENT"]
 
-        if direction == "in":
+        if direction == "write" or direction == "DML":
             src = warehouse
             dst = database
             src_type = "Warehouse"
             dst_type = "Database"
             src_image = _node_images["warehouse"]
             dst_image = _node_images["database"]
-        else:
+        else: # read
             src = database
             dst = warehouse
             src_type = "Database"
@@ -900,6 +834,13 @@ def get_distinct_values(df: pd.DataFrame, column: str) -> list:
     return [""] + sorted(df[column].astype(str).unique().tolist())
 
 
+def _get_index_for_value(options: list, value: str) -> int:
+    """Get the index for a value in options list, or 0 if not found."""
+    if value in options:
+        return options.index(value)
+    return 0
+
+
 def sidebar_filters(df: pd.DataFrame) -> pd.DataFrame:
     """Render sidebar filters and return filtered dataframe."""
     st.sidebar.header("Filters")
@@ -913,35 +854,83 @@ def sidebar_filters(df: pd.DataFrame) -> pd.DataFrame:
     org_options = get_distinct_values(df, "ORGANIZATION_NAME")
     direction_options = get_distinct_values(df, "DIRECTION")
 
-    database_name = st.sidebar.selectbox("Select Database", database_options)
-    warehouse_name = st.sidebar.selectbox("Select Warehouse", warehouse_options)
-    client_name = st.sidebar.selectbox("Select Client", client_options)
-    org_filter = st.sidebar.selectbox("Select Organization", org_options)
-    direction_filter = st.sidebar.selectbox("Select Direction", direction_options)
+    # Get stored values from session state
+    stored_database = st.session_state.get("stored_filter_database", "")
+    stored_warehouse = st.session_state.get("stored_filter_warehouse", "")
+    stored_client = st.session_state.get("stored_filter_client", "")
+    stored_org = st.session_state.get("stored_filter_org", "")
+    stored_direction = st.session_state.get("stored_filter_direction", "")
+    stored_access_count = st.session_state.get("stored_filter_access_count", 1)
+    stored_row_limit = st.session_state.get("stored_filter_row_limit", 500)
+
+    database_name = st.sidebar.selectbox(
+        "Select Database", database_options, 
+        index=_get_index_for_value(database_options, stored_database),
+    )
+    warehouse_name = st.sidebar.selectbox(
+        "Select Warehouse", warehouse_options,
+        index=_get_index_for_value(warehouse_options, stored_warehouse),
+    )
+    client_name = st.sidebar.selectbox(
+        "Select Client", client_options,
+        index=_get_index_for_value(client_options, stored_client),
+    )
+    org_filter = st.sidebar.selectbox(
+        "Select Organization", org_options,
+        index=_get_index_for_value(org_options, stored_org),
+    )
+    direction_filter = st.sidebar.selectbox(
+        "Select Direction", direction_options,
+        index=_get_index_for_value(direction_options, stored_direction),
+    )
+    
     access_count = st.sidebar.number_input(
         label="Access Count",
         min_value=1,
         max_value=1_000_000,
         step=10,
-        value=1,
+        value=stored_access_count,
         help="Please enter a number between 1 and 1,000,000",
     )
+    
+    # Row limit selector for network graph
+    row_limit_options = [100, 250, 500, 1000, 2500]
+    row_limit = st.sidebar.selectbox(
+        "Graph Row Limit",
+        row_limit_options,
+        index=_get_index_for_value(row_limit_options, stored_row_limit),
+        help="Limit rows shown in the network graph (by top access count)",
+    )
 
-    return apply_filters(df, database_name, warehouse_name, client_name,
-                         org_filter, direction_filter, access_count)
+    # Store current values back to session state for persistence
+    st.session_state["stored_filter_database"] = database_name
+    st.session_state["stored_filter_warehouse"] = warehouse_name
+    st.session_state["stored_filter_client"] = client_name
+    st.session_state["stored_filter_org"] = org_filter
+    st.session_state["stored_filter_direction"] = direction_filter
+    st.session_state["stored_filter_access_count"] = access_count
+    st.session_state["stored_filter_row_limit"] = row_limit
 
-def render_bar_charts(df: pd.DataFrame, dark_mode: bool = False) -> None:
+    filtered_df = apply_filters(df, database_name, warehouse_name, client_name,
+                                org_filter, direction_filter, access_count)
+    
+    # Apply row limit (data is already sorted by ACCESS_COUNT desc)
+    if len(filtered_df) > row_limit:
+        filtered_df = filtered_df.head(row_limit)
+    
+    return filtered_df
+
+def render_bar_charts(df: pd.DataFrame) -> None:
     if df.empty:
         st.warning("Apply different filters or load more data to see charts.")
         return
 
-    # Theme-aware colors: derive from Streamlit theme (more reliable than passing flags around)
+    # Theme-aware colors derived from Streamlit theme
     is_dark = get_streamlit_theme_is_dark()
     text_color = get_streamlit_theme_text_color()
     bar_color = STAR_BLUE if is_dark else SNOWFLAKE_BLUE
     grid_color = "rgba(255,255,255,0.18)" if is_dark else "rgba(0,0,0,0.10)"
     domain_color = "rgba(255,255,255,0.28)" if is_dark else "rgba(0,0,0,0.25)"
-    muted_text = "rgba(255,255,255,0.72)" if is_dark else "rgba(0,0,0,0.72)"
 
     def bar_chart(column, width=400):
         # Use cached chart data preparation
@@ -1014,37 +1003,148 @@ def render_bar_charts(df: pd.DataFrame, dark_mode: bool = False) -> None:
 
 
 def render_network_section(df: pd.DataFrame, network_html: str) -> None:
-    """Render network visualization."""
-    if st.session_state.get("full_screen_mode", False):
-        title_col, button_col = st.columns([9, 1])
-        with title_col:
-            st.markdown('<div class="network-title">Data Lake Explorer - Full Screen View</div>', unsafe_allow_html=True)
-        with button_col:
-            if st.button("⊞", help="Return to Split View"):
-                st.session_state["full_screen_mode"] = False
-                st.rerun()
-        
-        st.components.v1.html(network_html, height=800)
-        return
-
+    """Render network visualization in split view mode."""
+    # Content columns - title row and network in left column, charts in right column
     col1, col2 = st.columns(2, gap="small")
     with col1:
-        title_col, button_col = st.columns([9, 1])
+        # Title and fullscreen button on same row within left column
+        title_col, btn_col = st.columns([8, 1])
         with title_col:
-            st.markdown('<div class="network-title">Data Lake Explorer</div>', unsafe_allow_html=True)
-        with button_col:
+            st.markdown(
+                '<div style="padding-left: 50px;"><span class="network-title">Network Graph</span></div>',
+                unsafe_allow_html=True
+            )
+        with btn_col:
             if st.button("⛶", help="Full Screen"):
                 st.session_state["full_screen_mode"] = True
                 st.rerun()
         
-        st.components.v1.html(network_html, height=800, width=800)
+        st.components.v1.html(network_html, height=800)
     
     with col2:
         render_bar_charts(df)
 
 
 def main() -> None:
-    # Apply CSS (let Streamlit theme control light/dark text colors)
+    # Initialize filter defaults in session state if not present
+    filter_defaults = {
+        "stored_filter_database": "",
+        "stored_filter_warehouse": "",
+        "stored_filter_client": "",
+        "stored_filter_org": "",
+        "stored_filter_direction": "",
+        "stored_filter_access_count": 1,
+        "stored_filter_row_limit": 500,
+    }
+    for key, default in filter_defaults.items():
+        if key not in st.session_state:
+            st.session_state[key] = default
+    
+    is_fullscreen = st.session_state.get("full_screen_mode", False)
+    
+    # In fullscreen mode, render ONLY the network graph - nothing else
+    if is_fullscreen:
+        # Inject CSS to hide absolutely everything and fill viewport
+        st.markdown("""
+            <style>
+                /* Nuclear option - hide everything */
+                header, footer, .stDeployButton, [data-testid="stHeader"], 
+                [data-testid="stToolbar"], [data-testid="stDecoration"],
+                [data-testid="stStatusWidget"], [data-testid="stSidebar"],
+                #MainMenu, .stAppHeader {
+                    display: none !important;
+                    visibility: hidden !important;
+                    height: 0 !important;
+                    width: 0 !important;
+                    overflow: hidden !important;
+                }
+                /* Remove all padding/margins from containers */
+                .stApp, .stAppViewContainer, .stMain, 
+                [data-testid="stAppViewBlockContainer"],
+                .stMainBlockContainer, div.block-container,
+                [data-testid="stVerticalBlock"], section.main {
+                    padding: 0 !important;
+                    margin: 0 !important;
+                    max-width: 100vw !important;
+                    width: 100vw !important;
+                }
+                /* Make the iframe fill the entire screen */
+                div[data-testid="stIFrame"],
+                div[data-testid="stIFrame"] > div,
+                iframe {
+                    position: fixed !important;
+                    top: 0 !important;
+                    left: 0 !important;
+                    width: 100vw !important;
+                    height: 100vh !important;
+                    max-width: none !important;
+                    max-height: none !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    border: none !important;
+                    z-index: 999998 !important;
+                }
+                /* Exit button - Streamlit fullscreen style */
+                div[data-testid="stButton"] {
+                    position: fixed !important;
+                    top: 8px !important;
+                    right: 8px !important;
+                    z-index: 999999 !important;
+                }
+                div[data-testid="stButton"] button {
+                    background-color: transparent !important;
+                    border-radius: 4px !important;
+                    width: 32px !important;
+                    height: 32px !important;
+                    min-width: 32px !important;
+                    min-height: 32px !important;
+                    padding: 0 !important;
+                    font-size: 16px !important;
+                    font-weight: normal !important;
+                    box-shadow: none !important;
+                    border: none !important;
+                    color: rgba(128, 128, 128, 0.8) !important;
+                    display: flex !important;
+                    align-items: center !important;
+                    justify-content: center !important;
+                }
+                div[data-testid="stButton"] button:hover {
+                    background-color: rgba(128, 128, 128, 0.2) !important;
+                    color: rgba(128, 128, 128, 1) !important;
+                    transform: none !important;
+                }
+            </style>
+        """, unsafe_allow_html=True)
+        
+        # Exit button - using collapse/minimize icon like Streamlit's native button
+        if st.button("⤢", key="exit_fullscreen", help="Exit Full Screen"):
+            st.session_state["full_screen_mode"] = False
+            st.rerun()
+        
+        # Load data and render only the network
+        raw_df = load_data()
+        processed_df = process_dataframe(raw_df)
+        # Apply filters from session state (persisted from sidebar selections)
+        filtered_df = apply_filters(
+            processed_df,
+            database_name=st.session_state.get("stored_filter_database", ""),
+            warehouse_name=st.session_state.get("stored_filter_warehouse", ""),
+            client_name=st.session_state.get("stored_filter_client", ""),
+            org_filter=st.session_state.get("stored_filter_org", ""),
+            direction_filter=st.session_state.get("stored_filter_direction", ""),
+            access_count=st.session_state.get("stored_filter_access_count", 1),
+        )
+        # Apply row limit from session state
+        row_limit = st.session_state.get("stored_filter_row_limit", 500)
+        if len(filtered_df) > row_limit:
+            filtered_df = filtered_df.head(row_limit)
+        
+        node_images = load_node_images()
+        network_html = build_network_html(filtered_df, node_images, fullscreen=True)
+        st.components.v1.html(network_html, height=2000, scrolling=False)
+        return
+    
+    # Normal mode - render everything
     st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
     
     # Snowflake branded header with refresh button
@@ -1062,7 +1162,7 @@ def main() -> None:
     filtered_df = sidebar_filters(processed_df)
 
     node_images = load_node_images()
-    network_html = build_network_html(filtered_df, node_images)
+    network_html = build_network_html(filtered_df, node_images, fullscreen=False)
 
     render_network_section(filtered_df, network_html)
     st.sidebar.markdown("Powered by Streamlit :streamlit:")
