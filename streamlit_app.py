@@ -834,13 +834,6 @@ def get_distinct_values(df: pd.DataFrame, column: str) -> list:
     return [""] + sorted(df[column].astype(str).unique().tolist())
 
 
-def _get_index_for_value(options: list, value: str) -> int:
-    """Get the index for a value in options list, or 0 if not found."""
-    if value in options:
-        return options.index(value)
-    return 0
-
-
 def sidebar_filters(df: pd.DataFrame) -> pd.DataFrame:
     """Render sidebar filters and return filtered dataframe."""
     st.sidebar.header("Filters")
@@ -853,63 +846,90 @@ def sidebar_filters(df: pd.DataFrame) -> pd.DataFrame:
     client_options = get_distinct_values(df, "CLIENT")
     org_options = get_distinct_values(df, "ORGANIZATION_NAME")
     direction_options = get_distinct_values(df, "DIRECTION")
+    row_limit_options = [100, 250, 500, 1000]
 
-    # Get stored values from session state
-    stored_database = st.session_state.get("stored_filter_database", "")
-    stored_warehouse = st.session_state.get("stored_filter_warehouse", "")
-    stored_client = st.session_state.get("stored_filter_client", "")
-    stored_org = st.session_state.get("stored_filter_org", "")
-    stored_direction = st.session_state.get("stored_filter_direction", "")
-    stored_access_count = st.session_state.get("stored_filter_access_count", 1)
-    stored_row_limit = st.session_state.get("stored_filter_row_limit", 500)
+    # Only restore widget keys from persist keys when widget keys don't exist
+    # (widget keys get cleaned up by Streamlit when widgets aren't rendered, i.e. in fullscreen)
+    # During normal operation, widget keys exist and widgets manage their own state
+    filter_configs = [
+        ("database", database_options, ""),
+        ("warehouse", warehouse_options, ""),
+        ("client", client_options, ""),
+        ("org", org_options, ""),
+        ("direction", direction_options, ""),
+    ]
+    
+    for name, options, default in filter_configs:
+        persist_key = f"persist_filter_{name}"
+        widget_key = f"widget_filter_{name}"
+        # Get persisted value, validate it's still a valid option
+        persist_value = st.session_state.get(persist_key, default)
+        if persist_value not in options:
+            persist_value = default
+            st.session_state[persist_key] = default
+        # Only set widget key if it doesn't exist (restores after fullscreen)
+        if widget_key not in st.session_state:
+            st.session_state[widget_key] = persist_value
 
+    # Handle numeric access_count - only restore if widget key missing
+    if "widget_filter_access_count" not in st.session_state:
+        persist_access = st.session_state.get("persist_filter_access_count", 1)
+        st.session_state["widget_filter_access_count"] = persist_access
+    
+    # Handle row_limit - only restore if widget key missing
+    if "widget_filter_row_limit" not in st.session_state:
+        persist_row_limit = st.session_state.get("persist_filter_row_limit", 500)
+        if persist_row_limit not in row_limit_options:
+            persist_row_limit = 500
+            st.session_state["persist_filter_row_limit"] = 500
+        st.session_state["widget_filter_row_limit"] = persist_row_limit
+
+    # Create widgets with widget_* keys - Streamlit syncs these automatically
     database_name = st.sidebar.selectbox(
         "Select Database", database_options, 
-        index=_get_index_for_value(database_options, stored_database),
+        key="widget_filter_database",
     )
     warehouse_name = st.sidebar.selectbox(
         "Select Warehouse", warehouse_options,
-        index=_get_index_for_value(warehouse_options, stored_warehouse),
+        key="widget_filter_warehouse",
     )
     client_name = st.sidebar.selectbox(
         "Select Client", client_options,
-        index=_get_index_for_value(client_options, stored_client),
+        key="widget_filter_client",
     )
     org_filter = st.sidebar.selectbox(
         "Select Organization", org_options,
-        index=_get_index_for_value(org_options, stored_org),
+        key="widget_filter_org",
     )
     direction_filter = st.sidebar.selectbox(
-        "Select Direction", direction_options,
-        index=_get_index_for_value(direction_options, stored_direction),
+        "Statement Type", direction_options,
+        key="widget_filter_direction",
     )
     
     access_count = st.sidebar.number_input(
-        label="Access Count",
+        label="Minimum Access Count",
         min_value=1,
         max_value=1_000_000,
         step=10,
-        value=stored_access_count,
-        help="Please enter a number between 1 and 1,000,000",
+        key="widget_filter_access_count",
+        help="This is the minimum number of times a statement must be accessed to be shown in the network graph.",
     )
     
-    # Row limit selector for network graph
-    row_limit_options = [100, 250, 500, 1000, 2500]
     row_limit = st.sidebar.selectbox(
-        "Graph Row Limit",
+        "Graph Edge Limit",
         row_limit_options,
-        index=_get_index_for_value(row_limit_options, stored_row_limit),
-        help="Limit rows shown in the network graph (by top access count)",
+        key="widget_filter_row_limit",
+        help="Max number of edges shown in the network graph",
     )
 
-    # Store current values back to session state for persistence
-    st.session_state["stored_filter_database"] = database_name
-    st.session_state["stored_filter_warehouse"] = warehouse_name
-    st.session_state["stored_filter_client"] = client_name
-    st.session_state["stored_filter_org"] = org_filter
-    st.session_state["stored_filter_direction"] = direction_filter
-    st.session_state["stored_filter_access_count"] = access_count
-    st.session_state["stored_filter_row_limit"] = row_limit
+    # Sync widget values back to persist_* keys (for fullscreen mode to read)
+    st.session_state["persist_filter_database"] = database_name
+    st.session_state["persist_filter_warehouse"] = warehouse_name
+    st.session_state["persist_filter_client"] = client_name
+    st.session_state["persist_filter_org"] = org_filter
+    st.session_state["persist_filter_direction"] = direction_filter
+    st.session_state["persist_filter_access_count"] = access_count
+    st.session_state["persist_filter_row_limit"] = row_limit
 
     filtered_df = apply_filters(df, database_name, warehouse_name, client_name,
                                 org_filter, direction_filter, access_count)
@@ -1026,15 +1046,16 @@ def render_network_section(df: pd.DataFrame, network_html: str) -> None:
 
 
 def main() -> None:
-    # Initialize filter defaults in session state if not present
+    # Initialize persist_* filter defaults in session state if not present
+    # These keys are never used as widget keys, so Streamlit won't clean them up
     filter_defaults = {
-        "stored_filter_database": "",
-        "stored_filter_warehouse": "",
-        "stored_filter_client": "",
-        "stored_filter_org": "",
-        "stored_filter_direction": "",
-        "stored_filter_access_count": 1,
-        "stored_filter_row_limit": 500,
+        "persist_filter_database": "",
+        "persist_filter_warehouse": "",
+        "persist_filter_client": "",
+        "persist_filter_org": "",
+        "persist_filter_direction": "",
+        "persist_filter_access_count": 1,
+        "persist_filter_row_limit": 500,
     }
     for key, default in filter_defaults.items():
         if key not in st.session_state:
@@ -1124,18 +1145,18 @@ def main() -> None:
         # Load data and render only the network
         raw_df = load_data()
         processed_df = process_dataframe(raw_df)
-        # Apply filters from session state (persisted from sidebar selections)
+        # Apply filters from persist_* keys (these survive fullscreen transitions)
         filtered_df = apply_filters(
             processed_df,
-            database_name=st.session_state.get("stored_filter_database", ""),
-            warehouse_name=st.session_state.get("stored_filter_warehouse", ""),
-            client_name=st.session_state.get("stored_filter_client", ""),
-            org_filter=st.session_state.get("stored_filter_org", ""),
-            direction_filter=st.session_state.get("stored_filter_direction", ""),
-            access_count=st.session_state.get("stored_filter_access_count", 1),
+            database_name=st.session_state.get("persist_filter_database", ""),
+            warehouse_name=st.session_state.get("persist_filter_warehouse", ""),
+            client_name=st.session_state.get("persist_filter_client", ""),
+            org_filter=st.session_state.get("persist_filter_org", ""),
+            direction_filter=st.session_state.get("persist_filter_direction", ""),
+            access_count=st.session_state.get("persist_filter_access_count", 1),
         )
         # Apply row limit from session state
-        row_limit = st.session_state.get("stored_filter_row_limit", 500)
+        row_limit = st.session_state.get("persist_filter_row_limit", 500)
         if len(filtered_df) > row_limit:
             filtered_df = filtered_df.head(row_limit)
         
