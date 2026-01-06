@@ -233,42 +233,14 @@ CUSTOM_CSS = """
         .stSidebar h1, .stSidebar h2, .stSidebar h3 {
             text-align: left !important;
         }
-        
-        /* Full screen mode styles - hide EVERYTHING except the network */
-        .fullscreen-mode header[data-testid="stHeader"],
-        .fullscreen-mode [data-testid="stSidebar"],
-        .fullscreen-mode [data-testid="stToolbar"],
-        .fullscreen-mode [data-testid="stDecoration"],
-        .fullscreen-mode [data-testid="stStatusWidget"],
-        .fullscreen-mode .stDeployButton,
-        .fullscreen-mode footer,
-        .fullscreen-mode #MainMenu,
-        .fullscreen-mode .stAppHeader,
-        .fullscreen-mode [data-testid="stAppViewBlockContainer"] > div:not(:has(iframe)),
-        .fullscreen-mode [data-testid="stVerticalBlock"] > div:not(:has(iframe)):not(:has(button)) {
-            display: none !important;
-            visibility: hidden !important;
-        }
-        .fullscreen-mode,
-        .fullscreen-mode .stApp,
-        .fullscreen-mode .stAppViewContainer,
-        .fullscreen-mode .stMain,
-        .fullscreen-mode [data-testid="stAppViewBlockContainer"],
-        .fullscreen-mode .stMainBlockContainer,
-        .fullscreen-mode div.block-container,
-        .fullscreen-mode [data-testid="stVerticalBlock"] {
-            padding: 0 !important;
-            margin: 0 !important;
-            max-width: 100vw !important;
-            width: 100vw !important;
-            height: 100vh !important;
-            overflow: hidden !important;
-            position: fixed !important;
-            top: 0 !important;
-            left: 0 !important;
-        }
         .st-emotion-cache-wfksaw {
             gap: 0rem !important;
+        }
+        /* Fullscreen button alignment - target the column containing the marker */
+        .stColumn:has(.fullscreen-btn-container) > div {
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: flex-end !important;
         }
     </style>
     """
@@ -421,11 +393,7 @@ def _hex_to_rgb(hex_color: str) -> Optional[RGB]:
     if len(hex_color) != 6:
         return None
     try:
-        return (
-            int(hex_color[0:2], 16),
-            int(hex_color[2:4], 16),
-            int(hex_color[4:6], 16),
-        )
+        return (int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16))
     except ValueError:
         return None
 
@@ -435,41 +403,37 @@ def _relative_luminance(rgb: RGB) -> float:
     return (0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]) / 255
 
 
-def get_streamlit_theme_is_dark() -> bool:
-    """Best-effort detection of Streamlit theme (works in local + SiS)."""
+def get_theme_colors() -> Tuple[bool, str]:
+    """Return (is_dark, text_color) tuple for current Streamlit theme."""
+    is_dark = False
     try:
         base = st.get_option("theme.base")
         if base == "dark":
-            return True
-        if base == "light":
-            return False
-
-        # Prefer background colors if present
-        for opt in ("theme.backgroundColor", "theme.secondaryBackgroundColor"):
-            bg = st.get_option(opt)
-            rgb = _hex_to_rgb(bg) if isinstance(bg, str) else None
-            if rgb is not None:
-                return _relative_luminance(rgb) < 0.5
-
-        # Fall back to textColor if present (light text usually implies dark theme)
-        txt = st.get_option("theme.textColor")
-        rgb = _hex_to_rgb(txt) if isinstance(txt, str) else None
-        if rgb is not None:
-            return _relative_luminance(rgb) > 0.5
+            is_dark = True
+        elif base != "light":
+            for opt in ("theme.backgroundColor", "theme.secondaryBackgroundColor"):
+                bg = st.get_option(opt)
+                rgb = _hex_to_rgb(bg) if isinstance(bg, str) else None
+                if rgb:
+                    is_dark = _relative_luminance(rgb) < 0.5
+                    break
+            else:
+                txt = st.get_option("theme.textColor")
+                rgb = _hex_to_rgb(txt) if isinstance(txt, str) else None
+                if rgb:
+                    is_dark = _relative_luminance(rgb) > 0.5
     except Exception:
         pass
-    return False
 
-
-def get_streamlit_theme_text_color() -> str:
-    """Get a readable text color that matches Streamlit's theme."""
+    text_color = "#fafafa" if is_dark else MIDNIGHT
     try:
         txt = st.get_option("theme.textColor")
-        if isinstance(txt, str) and _hex_to_rgb(txt) is not None:
-            return txt
+        if isinstance(txt, str) and _hex_to_rgb(txt):
+            text_color = txt
     except Exception:
         pass
-    return "#fafafa" if get_streamlit_theme_is_dark() else MIDNIGHT
+
+    return is_dark, text_color
 
 
 @st.cache_data(show_spinner=False)
@@ -837,188 +801,97 @@ def get_distinct_values(df: pd.DataFrame, column: str) -> list:
 def sidebar_filters(df: pd.DataFrame) -> pd.DataFrame:
     """Render sidebar filters and return filtered dataframe."""
     st.sidebar.header("Filters")
-
     if df.empty:
         return df
 
-    database_options = get_distinct_values(df, "DATABASE")
-    warehouse_options = get_distinct_values(df, "WAREHOUSE")
-    client_options = get_distinct_values(df, "CLIENT")
-    org_options = get_distinct_values(df, "ORGANIZATION_NAME")
-    direction_options = get_distinct_values(df, "DIRECTION")
-    row_limit_options = [100, 250, 500, 1000]
-
-    # Only restore widget keys from persist keys when widget keys don't exist
-    # (widget keys get cleaned up by Streamlit when widgets aren't rendered, i.e. in fullscreen)
-    # During normal operation, widget keys exist and widgets manage their own state
+    # Define selectbox filters: (name, column, label)
     filter_configs = [
-        ("database", database_options, ""),
-        ("warehouse", warehouse_options, ""),
-        ("client", client_options, ""),
-        ("org", org_options, ""),
-        ("direction", direction_options, ""),
+        ("database", "DATABASE", "Select Database"),
+        ("warehouse", "WAREHOUSE", "Select Warehouse"),
+        ("client", "CLIENT", "Select Client"),
+        ("org", "ORGANIZATION_NAME", "Select Organization"),
+        ("direction", "DIRECTION", "Statement Type"),
     ]
     
-    for name, options, default in filter_configs:
-        persist_key = f"persist_filter_{name}"
-        widget_key = f"widget_filter_{name}"
-        # Get persisted value, validate it's still a valid option
-        persist_value = st.session_state.get(persist_key, default)
-        if persist_value not in options:
-            persist_value = default
-            st.session_state[persist_key] = default
-        # Only set widget key if it doesn't exist (restores after fullscreen)
+    values = {}
+    for name, col, label in filter_configs:
+        options = get_distinct_values(df, col)
+        persist_key, widget_key = f"persist_filter_{name}", f"widget_filter_{name}"
+        persist_val = st.session_state.get(persist_key, "")
+        if persist_val not in options:
+            persist_val = ""
         if widget_key not in st.session_state:
-            st.session_state[widget_key] = persist_value
+            st.session_state[widget_key] = persist_val
+        values[name] = st.sidebar.selectbox(label, options, key=widget_key)
+        st.session_state[persist_key] = values[name]
 
-    # Handle numeric access_count - only restore if widget key missing
+    # Numeric access_count filter
     if "widget_filter_access_count" not in st.session_state:
-        persist_access = st.session_state.get("persist_filter_access_count", 1)
-        st.session_state["widget_filter_access_count"] = persist_access
-    
-    # Handle row_limit - only restore if widget key missing
-    if "widget_filter_row_limit" not in st.session_state:
-        persist_row_limit = st.session_state.get("persist_filter_row_limit", 500)
-        if persist_row_limit not in row_limit_options:
-            persist_row_limit = 500
-            st.session_state["persist_filter_row_limit"] = 500
-        st.session_state["widget_filter_row_limit"] = persist_row_limit
-
-    # Create widgets with widget_* keys - Streamlit syncs these automatically
-    database_name = st.sidebar.selectbox(
-        "Select Database", database_options, 
-        key="widget_filter_database",
-    )
-    warehouse_name = st.sidebar.selectbox(
-        "Select Warehouse", warehouse_options,
-        key="widget_filter_warehouse",
-    )
-    client_name = st.sidebar.selectbox(
-        "Select Client", client_options,
-        key="widget_filter_client",
-    )
-    org_filter = st.sidebar.selectbox(
-        "Select Organization", org_options,
-        key="widget_filter_org",
-    )
-    direction_filter = st.sidebar.selectbox(
-        "Statement Type", direction_options,
-        key="widget_filter_direction",
-    )
-    
-    access_count = st.sidebar.number_input(
-        label="Minimum Access Count",
-        min_value=1,
-        max_value=1_000_000,
-        step=10,
-        key="widget_filter_access_count",
-        help="This is the minimum number of times a statement must be accessed to be shown in the network graph.",
-    )
-    
-    row_limit = st.sidebar.selectbox(
-        "Graph Edge Limit",
-        row_limit_options,
-        key="widget_filter_row_limit",
-        help="Max number of edges shown in the network graph",
-    )
-
-    # Sync widget values back to persist_* keys (for fullscreen mode to read)
-    st.session_state["persist_filter_database"] = database_name
-    st.session_state["persist_filter_warehouse"] = warehouse_name
-    st.session_state["persist_filter_client"] = client_name
-    st.session_state["persist_filter_org"] = org_filter
-    st.session_state["persist_filter_direction"] = direction_filter
+        st.session_state["widget_filter_access_count"] = st.session_state.get("persist_filter_access_count", 1)
+    access_count = st.sidebar.number_input("Access Count Limit", min_value=1, max_value=1_000_000,
+                                           step=10, key="widget_filter_access_count",
+                                           help="Please enter a number between 1 and 1,000,000")
     st.session_state["persist_filter_access_count"] = access_count
+
+    # Row limit filter
+    row_limit_options = [100, 250, 500, 1000, 2500]
+    if "widget_filter_row_limit" not in st.session_state:
+        persist_row = st.session_state.get("persist_filter_row_limit", 500)
+        st.session_state["widget_filter_row_limit"] = persist_row if persist_row in row_limit_options else 500
+    row_limit = st.sidebar.selectbox("Graph Row Limit", row_limit_options, key="widget_filter_row_limit",
+                                     help="Limit rows shown in the network graph (by top access count)")
     st.session_state["persist_filter_row_limit"] = row_limit
 
-    filtered_df = apply_filters(df, database_name, warehouse_name, client_name,
-                                org_filter, direction_filter, access_count)
-    
-    # Apply row limit (data is already sorted by ACCESS_COUNT desc)
-    if len(filtered_df) > row_limit:
-        filtered_df = filtered_df.head(row_limit)
-    
-    return filtered_df
+    filtered_df = apply_filters(df, values["database"], values["warehouse"], values["client"],
+                                values["org"], values["direction"], access_count)
+    return filtered_df.head(row_limit) if len(filtered_df) > row_limit else filtered_df
+
+def _configure_chart(chart: alt.Chart, text_color: str, grid_color: str, domain_color: str) -> alt.Chart:
+    """Apply standard Snowflake theme configuration to chart."""
+    return (chart
+        .configure_axis(labelFont="Lato", titleFont="Lato", labelFontSize=12, titleFontSize=12,
+                       labelColor=text_color, titleColor=text_color, gridColor=grid_color,
+                       domainColor=domain_color, tickColor=domain_color, labelPadding=6, titlePadding=10)
+        .configure_legend(labelFont="Lato", titleFont="Lato", labelColor=text_color, titleColor=text_color)
+        .configure_title(font="Lato", color=text_color)
+        .configure_view(strokeWidth=0)
+        .configure(background="transparent"))
+
 
 def render_bar_charts(df: pd.DataFrame) -> None:
     if df.empty:
         st.warning("Apply different filters or load more data to see charts.")
         return
 
-    # Theme-aware colors derived from Streamlit theme
-    is_dark = get_streamlit_theme_is_dark()
-    text_color = get_streamlit_theme_text_color()
+    is_dark, text_color = get_theme_colors()
     bar_color = STAR_BLUE if is_dark else SNOWFLAKE_BLUE
     grid_color = "rgba(255,255,255,0.18)" if is_dark else "rgba(0,0,0,0.10)"
     domain_color = "rgba(255,255,255,0.28)" if is_dark else "rgba(0,0,0,0.25)"
 
     def bar_chart(column, width=400):
-        # Use cached chart data preparation
         data = prepare_chart_data(df, column)
         if data.empty:
             return
-            
         chart = (
             alt.Chart(data)
-            .mark_bar(
-                color=bar_color,
-                cornerRadiusEnd=4,
-            )
+            .mark_bar(color=bar_color, cornerRadiusEnd=4)
             .encode(
                 x=alt.X("Access Count:Q", title="Access Count"),
                 y=alt.Y(f"{column.title()}:N", sort="-x", title=column.title()),
-                tooltip=[
-                    alt.Tooltip(column.title() + ":N", title=column.title()),
-                    alt.Tooltip("Access Count:Q", title="Access Count", format=",")
-                ],
+                tooltip=[alt.Tooltip(column.title() + ":N", title=column.title()),
+                        alt.Tooltip("Access Count:Q", title="Access Count", format=",")],
             )
-            .properties(
-                width=width, 
-                height=350, 
-                title=alt.TitleParams(
-                    text=f"Access Count by {column.title()}",
-                    fontSize=16,
-                    fontWeight="bold",
-                    color=text_color,
-                    font="Lato"
-                )
-            )
-            .configure_axis(
-                labelFont="Lato",
-                titleFont="Lato",
-                labelFontSize=12,
-                titleFontSize=12,
-                labelColor=text_color,
-                titleColor=text_color,
-                gridColor=grid_color,
-                domainColor=domain_color,
-                tickColor=domain_color,
-                labelPadding=6,
-                titlePadding=10,
-            )
-            .configure_legend(
-                labelFont="Lato",
-                titleFont="Lato",
-                labelColor=text_color,
-                titleColor=text_color,
-            )
-            .configure_title(
-                font="Lato",
-                color=text_color,
-            )
-            .configure_view(
-                strokeWidth=0
-            )
-            .configure(background="transparent")
+            .properties(width=width, height=350, 
+                       title=alt.TitleParams(text=f"Access Count by {column.title()}",
+                                            fontSize=16, fontWeight="bold", color=text_color, font="Lato"))
         )
-        st.altair_chart(chart, use_container_width=True)
+        st.altair_chart(_configure_chart(chart, text_color, grid_color, domain_color), use_container_width=True)
 
     col21, col22 = st.columns(2)
     with col21:
         bar_chart("CLIENT")
     with col22:
         bar_chart("DATABASE")
-
     bar_chart("WAREHOUSE", width=800)
 
 
@@ -1035,6 +908,7 @@ def render_network_section(df: pd.DataFrame, network_html: str) -> None:
                 unsafe_allow_html=True
             )
         with btn_col:
+            st.markdown('<div class="fullscreen-btn-container"></div>', unsafe_allow_html=True)
             if st.button("⛶", help="Full Screen"):
                 st.session_state["full_screen_mode"] = True
                 st.rerun()
