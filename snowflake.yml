@@ -1,17 +1,18 @@
-definition_version: 1
-streamlit:
-  name: DATA_LAKE_EXPLORER
-  stage: YOUR_DB.YOUR_SCHEMA.YOUR_STAGE  # Update with your Snowflake stage
-  main_file: streamlit_app.py
-  query_warehouse: COMPUTE_WH  # Update with your warehouse
-  python: 3.11
-  packages:
-    - streamlit
-    - pandas
-    - altair==5.5.0
-    - pyvis==0.3.2
-    - networkx==3.4.2
-    - pillow==12.0.0
-artifacts:
-  - streamlit_app.py
-  - static/**
+definition_version: 2
+entities:
+  data_lake_explorer:
+    type: streamlit
+    identifier:
+      name: DATA_LAKE_EXPLORER
+    title: "Data Lake Explorer"
+    comment: "Visualize data lake access patterns from Snowflake Horizon Catalog"
+    query_warehouse: COMPUTE_WH
+    main_file: streamlit_app.py
+    pages_dir: null
+    artifacts:
+      - streamlit_app.py
+      - static/
+
+defaults:
+  streamlit:
+    stage: SNOWFLAKE_DATA_LAKE.DATA_LAKE_ACCESS.STREAMLIT_STAGE

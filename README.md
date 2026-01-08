@@ -50,7 +50,7 @@ cd data-lake-explorer
 
 # Create conda environment
 conda env create -f environment.yml
-conda activate streamlit-medtronic
+conda activate streamlit-data-lake-explorer
 ```
 
 ## Running Locally
@@ -66,52 +66,107 @@ The app will open in your browser at `http://localhost:8501`
 ## Deploying to Snowflake (Streamlit in Snowflake)
 
 ### Prerequisites
-- Snowflake CLI (`snow`) installed
-- Snowflake account with appropriate permissions
+- [Snowflake CLI](https://docs.snowflake.com/en/developer-guide/snowflake-cli) (`snow`) installed
+- Snowflake account with **ACCOUNTADMIN** role access
+- A warehouse for running queries
 
-### Deployment Steps
+### Quick Deploy (Recommended)
 
-1. **Update `snowflake.yml`** with your database, schema, and stage:
+The easiest way to deploy is using the automated deployment scripts:
 
-```yaml
-definition_version: 1
-streamlit:
-  name: DATA_LAKE_EXPLORER
-  stage: YOUR_DB.YOUR_SCHEMA.YOUR_STAGE
-  main_file: streamlit_app.py
-  query_warehouse: YOUR_WAREHOUSE
-  python: 3.11
-  packages:
-    - streamlit
-    - pandas
-    - altair==5.5.0
-    - pyvis==0.3.2
-    - networkx==3.4.2
-    - pillow==12.0.0
-artifacts:
-  - streamlit_app.py
-  - static/**
+**Mac/Linux:**
+```bash
+# Configure your Snowflake connection (one-time setup)
+snow connection add
+
+# Deploy everything
+./deploy.sh <connection_name> [warehouse_name]
+
+# Example:
+./deploy.sh my_snowflake_connection COMPUTE_WH
 ```
 
-2. **Deploy using Snowflake CLI**:
+**Windows:**
+```cmd
+REM Configure your Snowflake connection (one-time setup)
+snow connection add
+
+REM Deploy everything
+deploy.bat <connection_name> [warehouse_name]
+
+REM Example:
+deploy.bat my_snowflake_connection COMPUTE_WH
+```
+
+The deployment script will:
+1. Create the `SNOWFLAKE_DATA_LAKE.DATA_LAKE_ACCESS` database and schema
+2. Create the data table and refresh task
+3. Execute the task to load initial 30-day access data
+4. Deploy the Streamlit app
+
+### Manual Deployment
+
+If you prefer step-by-step deployment:
+
+#### Step 1: Set up the Database and Data Pipeline
+
+Run the setup script to create the database, schema, table, and scheduled refresh task:
 
 ```bash
-snow streamlit deploy
+snow sql --connection <connection_name> \
+    --filename snowflake_data_set_up.sql \
+    --role ACCOUNTADMIN \
+    --warehouse <warehouse_name>
+```
+
+Or run directly in Snowflake:
+```sql
+-- Open snowflake_data_set_up.sql in Snowsight and execute
+```
+
+**What `snowflake_data_set_up.sql` creates:**
+- Database: `SNOWFLAKE_DATA_LAKE`
+- Schema: `DATA_LAKE_ACCESS`
+- Table: `data_lake_access_30d` (30-day access snapshot)
+- Stage: `STREAMLIT_STAGE` (for app deployment)
+- Task: `DATA_LAKE_ACCESS_REFRESH_TASK` (runs weekly on Sundays at 6am CST)
+
+#### Step 2: Deploy the Streamlit App
+
+```bash
+snow streamlit deploy \
+    --connection <connection_name> \
+    --database SNOWFLAKE_DATA_LAKE \
+    --schema DATA_LAKE_ACCESS \
+    --replace
+```
+
+### Customizing the Warehouse
+
+By default, the refresh task uses `COMPUTE_WH`. To change this, edit `snowflake_data_set_up.sql` before deployment:
+
+```sql
+CREATE OR REPLACE TASK SNOWFLAKE_DATA_LAKE.DATA_LAKE_ACCESS.DATA_LAKE_ACCESS_REFRESH_TASK
+  WAREHOUSE = YOUR_WAREHOUSE_NAME  -- Change this
+  ...
 ```
 
 ## Project Structure
 
 ```
 data-lake-explorer/
-├── streamlit_app.py      # Main Streamlit application
-├── static/               # Static assets (images)
+├── streamlit_app.py          # Main Streamlit application
+├── snowflake_data_set_up.sql # Database/schema/task setup script
+├── deploy.sh                 # Deployment script (Mac/Linux)
+├── deploy.bat                # Deployment script (Windows)
+├── snowflake.yml             # Snowflake CLI deployment config
+├── static/                   # Static assets (images)
 │   ├── snowflake-bug-logo.png
 │   ├── snowflake-database.png
 │   ├── snowflake-warehouse.png
 │   └── ...
-├── requirements.txt      # pip dependencies
-├── environment.yml       # conda environment
-├── snowflake.yml         # Snowflake deployment config
+├── requirements.txt          # pip dependencies
+├── environment.yml           # conda environment
 └── README.md
 ```
 
@@ -119,10 +174,14 @@ data-lake-explorer/
 
 ### Snowflake Permissions
 
-The app queries the following views (requires `SNOWFLAKE` database access):
+**Setup requires ACCOUNTADMIN** to create the database, schema, and task.
+
+The app queries data from `snowflake.account_usage` views:
 - `snowflake.account_usage.sessions`
 - `snowflake.account_usage.query_history`
 - `snowflake.account_usage.access_history`
+
+The refresh task pre-aggregates this data into `SNOWFLAKE_DATA_LAKE.DATA_LAKE_ACCESS.data_lake_access_30d` for fast dashboard performance.
 
 ### Client Application Mappings
 

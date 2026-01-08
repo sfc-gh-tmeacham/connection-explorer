@@ -356,7 +356,9 @@ def load_data() -> pd.DataFrame:
         return sample_dataframe()
     try:
         query = """
-            select 'MDTPLC' as ACCOUNT_NAME, * from data_lake_access_30d order by access_count desc;
+            SELECT account_id AS ACCOUNT_NAME, * 
+            FROM SNOWFLAKE_DATA_LAKE.DATA_LAKE_ACCESS.data_lake_access_30d 
+            ORDER BY access_count DESC;
         """
  
         result_df = session.sql(query).to_pandas()
