@@ -151,6 +151,34 @@ CREATE OR REPLACE TASK SNOWFLAKE_DATA_LAKE.DATA_LAKE_ACCESS.DATA_LAKE_ACCESS_REF
   ...
 ```
 
+## Uninstalling
+
+To remove all Snowflake Data Lake Explorer objects from your account:
+
+**Mac/Linux:**
+```bash
+./uninstall.sh <connection_name>
+
+# To keep the database but remove everything else:
+./uninstall.sh <connection_name> --keep-database
+```
+
+**Windows:**
+```cmd
+uninstall.bat <connection_name>
+
+REM To keep the database but remove everything else:
+uninstall.bat <connection_name> --keep-database
+```
+
+This will remove:
+- Streamlit app
+- Scheduled refresh task
+- Stored procedure
+- Data table
+- Stage
+- Schema (and optionally the database)
+
 ## Project Structure
 
 ```
@@ -159,6 +187,8 @@ data-lake-explorer/
 ├── snowflake_data_set_up.sql # Database/schema/task setup script
 ├── deploy.sh                 # Deployment script (Mac/Linux)
 ├── deploy.bat                # Deployment script (Windows)
+├── uninstall.sh              # Uninstall script (Mac/Linux)
+├── uninstall.bat             # Uninstall script (Windows)
 ├── snowflake.yml             # Snowflake CLI deployment config
 ├── static/                   # Static assets (images)
 │   ├── snowflake-bug-logo.png
