@@ -24,13 +24,12 @@ CREATE TABLE IF NOT EXISTS SNOWFLAKE_DATA_LAKE.DATA_LAKE_ACCESS.data_lake_access
     access_count NUMBER
 );
 
--- Create the refresh task
--- NOTE: Update WAREHOUSE to your preferred warehouse before running
-CREATE OR REPLACE TASK SNOWFLAKE_DATA_LAKE.DATA_LAKE_ACCESS.DATA_LAKE_ACCESS_REFRESH_TASK
-  WAREHOUSE = COMPUTE_WH
-  SCHEDULE = 'USING CRON 0 6 * * 0 America/Chicago'
-  COMMENT = 'Refreshes data lake access data every Sunday at 6am CST'
+-- Create the refresh stored procedure
+CREATE OR REPLACE PROCEDURE SNOWFLAKE_DATA_LAKE.DATA_LAKE_ACCESS.REFRESH_DATA_LAKE_ACCESS()
+RETURNS STRING
+LANGUAGE SQL
 AS
+$$
 BEGIN
     TRUNCATE TABLE SNOWFLAKE_DATA_LAKE.DATA_LAKE_ACCESS.data_lake_access_30d;
     
@@ -174,10 +173,22 @@ BEGIN
         count(distinct query_id) as access_count
     FROM raw_access r
     GROUP BY ALL;
+    
+    RETURN 'Data lake access data refreshed successfully';
 END;
+$$;
+
+-- Create the refresh task that calls the stored procedure
+-- NOTE: Update WAREHOUSE to your preferred warehouse before running
+CREATE OR REPLACE TASK SNOWFLAKE_DATA_LAKE.DATA_LAKE_ACCESS.DATA_LAKE_ACCESS_REFRESH_TASK
+  WAREHOUSE = COMPUTE_WH
+  SCHEDULE = 'USING CRON 0 6 * * 0 America/Chicago'
+  COMMENT = 'Refreshes data lake access data every Sunday at 6am CST'
+AS
+  CALL SNOWFLAKE_DATA_LAKE.DATA_LAKE_ACCESS.REFRESH_DATA_LAKE_ACCESS();
 
 -- Resume the task so it runs on schedule
 ALTER TASK SNOWFLAKE_DATA_LAKE.DATA_LAKE_ACCESS.DATA_LAKE_ACCESS_REFRESH_TASK RESUME;
 
--- Execute the task immediately to populate initial data
-EXECUTE TASK SNOWFLAKE_DATA_LAKE.DATA_LAKE_ACCESS.DATA_LAKE_ACCESS_REFRESH_TASK;
+-- Execute the procedure immediately to populate initial data
+CALL SNOWFLAKE_DATA_LAKE.DATA_LAKE_ACCESS.REFRESH_DATA_LAKE_ACCESS();

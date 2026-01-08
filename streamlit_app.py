@@ -257,13 +257,13 @@ def render_snowflake_header() -> None:
     """Render header with Data Lake Explorer as main title and Horizon Catalog as subheader."""
     logo_b64 = load_snowflake_logo()
     
-    # Main header: Data Lake Explorer in black
-    # Subheader: Snowflake logo + Horizon Catalog in 18pt Snowflake blue
+    # Main header: Data Lake Explorer - inherits theme text color
+    # Subheader: Snowflake logo + Horizon Catalog in Snowflake blue
     st.markdown(
         f'''
         <div style="padding: 0.25rem 0; padding-left: 50px;">
             <h1 style="font-family: Lato, sans-serif; font-size: 32px; font-weight: 900; 
-                       color: #000000; letter-spacing: 0.02em; line-height: 1.2; 
+                       color: inherit; letter-spacing: 0.02em; line-height: 1.2; 
                        margin: 0; padding: 0; text-align: left;">
                 Data Lake Explorer
             </h1>
@@ -811,7 +811,7 @@ def sidebar_filters(df: pd.DataFrame) -> pd.DataFrame:
         ("database", "DATABASE", "Select Database"),
         ("warehouse", "WAREHOUSE", "Select Warehouse"),
         ("client", "CLIENT", "Select Client"),
-        ("org", "ORGANIZATION_NAME", "Select Organization"),
+        # ("org", "ORGANIZATION_NAME", "Select Organization"),  # Reserved for future use
         ("direction", "DIRECTION", "Statement Type"),
     ]
     
@@ -845,7 +845,7 @@ def sidebar_filters(df: pd.DataFrame) -> pd.DataFrame:
     st.session_state["persist_filter_row_limit"] = row_limit
 
     filtered_df = apply_filters(df, values["database"], values["warehouse"], values["client"],
-                                values["org"], values["direction"], access_count)
+                                "", values["direction"], access_count)  # org filter disabled
     return filtered_df.head(row_limit) if len(filtered_df) > row_limit else filtered_df
 
 def _configure_chart(chart: alt.Chart, text_color: str, grid_color: str, domain_color: str) -> alt.Chart:

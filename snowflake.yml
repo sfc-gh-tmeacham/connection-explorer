@@ -1,18 +1,12 @@
-definition_version: 2
-entities:
-  data_lake_explorer:
-    type: streamlit
-    identifier:
-      name: DATA_LAKE_EXPLORER
-    title: "Data Lake Explorer"
-    comment: "Visualize data lake access patterns from Snowflake Horizon Catalog"
-    query_warehouse: COMPUTE_WH
-    main_file: streamlit_app.py
-    pages_dir: null
-    artifacts:
-      - streamlit_app.py
-      - static/
-
-defaults:
-  streamlit:
-    stage: SNOWFLAKE_DATA_LAKE.DATA_LAKE_ACCESS.STREAMLIT_STAGE
+definition_version: 1
+streamlit:
+  name: SNOWFLAKE_DATA_LAKE_EXPLORER
+  title: "Snowflake Data Lake Explorer"
+  stage: SNOWFLAKE_DATA_LAKE.DATA_LAKE_ACCESS.STREAMLIT_STAGE
+  main_file: streamlit_app.py
+  query_warehouse: COMPUTE_WH
+  additional_source_files:
+    - static/snowflake-bug-logo.png
+    - static/snowflake-database.png
+    - static/snowflake-warehouse.png
+    - environment.yml

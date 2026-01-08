@@ -1,4 +1,4 @@
-# Data Lake Explorer
+# Snowflake Data Lake Explorer
 
 **Full visibility into your Snowflake data access** — A Streamlit application that visualizes database and warehouse access patterns using interactive network graphs powered by Snowflake Horizon Catalog.
 
@@ -102,7 +102,7 @@ The deployment script will:
 1. Create the `SNOWFLAKE_DATA_LAKE.DATA_LAKE_ACCESS` database and schema
 2. Create the data table and refresh task
 3. Execute the task to load initial 30-day access data
-4. Deploy the Streamlit app
+4. Deploy the Streamlit app as **Snowflake Data Lake Explorer**
 
 ### Manual Deployment
 
