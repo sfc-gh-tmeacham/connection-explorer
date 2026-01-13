@@ -4,6 +4,14 @@
 
 ![Snowflake](static/snowflake-bug-logo.png)
 
+## Repository Policy (Public / Read-Only)
+
+This repository is published **as-is** for reference and reuse.
+
+- **Support**: No support is provided.
+- **Issues / Discussions**: Not accepted.
+- **Pull requests**: Not accepted (please fork if you’d like to modify).
+
 ## Features
 
 - **Interactive Network Visualization**: See how databases, warehouses, and client applications connect
