@@ -96,3 +96,5 @@ tmp/
 temp/
 *.tmp
 
+# Articles / drafts
+MEDIUM_ARTICLE.md
