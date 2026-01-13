@@ -5,13 +5,13 @@
 # Prerequisites:
 #   1. Snowflake CLI (snow) installed: https://docs.snowflake.com/en/developer-guide/snowflake-cli
 #   2. Connection configured: snow connection add
-#   3. ACCOUNTADMIN role access
+#   3. Role with required privileges (see snowflake_data_set_up.sql header)
 #
 # Usage:
-#   ./deploy.sh [connection_name]
+#   ./deploy.sh <connection_name> [warehouse_name]
 #
 # Example:
-#   ./deploy.sh my_snowflake_connection
+#   ./deploy.sh my_snowflake_connection COMPUTE_WH
 # =============================================================================
 
 set -e  # Exit on error
@@ -32,7 +32,6 @@ echo "[1/3] Setting up database, schema, and refresh task..."
 snow sql \
     --connection "$CONNECTION" \
     --filename snowflake_data_set_up.sql \
-    --role ACCOUNTADMIN \
     --warehouse "$WAREHOUSE"
 
 echo ""

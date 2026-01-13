@@ -1,9 +1,13 @@
 -- =============================================================================
 -- Data Lake Access Setup Script
--- Requires ACCOUNTADMIN role to run
+-- 
+-- Required Privileges:
+--   - CREATE DATABASE ON ACCOUNT (or use existing database)
+--   - CREATE SCHEMA (on the target database)
+--   - CREATE TABLE, CREATE STAGE, CREATE PROCEDURE (on the schema)
+--   - CREATE TASK, EXECUTE TASK (on account or schema)
+--   - IMPORTED PRIVILEGES ON DATABASE SNOWFLAKE (for account_usage views)
 -- =============================================================================
-
-USE ROLE ACCOUNTADMIN;
 
 -- Create database and schema
 CREATE DATABASE IF NOT EXISTS SNOWFLAKE_DATA_LAKE;

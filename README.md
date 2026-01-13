@@ -1,4 +1,4 @@
-# Snowflake Data Lake Explorer
+# Data Lake Explorer
 
 **Full visibility into your Snowflake data access** — A Streamlit application that visualizes database and warehouse access patterns using interactive network graphs powered by Snowflake Horizon Catalog.
 
@@ -67,7 +67,7 @@ The app will open in your browser at `http://localhost:8501`
 
 ### Prerequisites
 - [Snowflake CLI](https://docs.snowflake.com/en/developer-guide/snowflake-cli) (`snow`) installed
-- Snowflake account with **ACCOUNTADMIN** role access
+- Snowflake account with a role that has the [required privileges](#snowflake-permissions)
 - A warehouse for running queries
 
 ### Quick Deploy (Recommended)
@@ -102,7 +102,7 @@ The deployment script will:
 1. Create the `SNOWFLAKE_DATA_LAKE.DATA_LAKE_ACCESS` database and schema
 2. Create the data table and refresh task
 3. Execute the task to load initial 30-day access data
-4. Deploy the Streamlit app as **Snowflake Data Lake Explorer**
+4. Deploy the Streamlit app
 
 ### Manual Deployment
 
@@ -115,7 +115,6 @@ Run the setup script to create the database, schema, table, and scheduled refres
 ```bash
 snow sql --connection <connection_name> \
     --filename snowflake_data_set_up.sql \
-    --role ACCOUNTADMIN \
     --warehouse <warehouse_name>
 ```
 
@@ -153,7 +152,7 @@ CREATE OR REPLACE TASK SNOWFLAKE_DATA_LAKE.DATA_LAKE_ACCESS.DATA_LAKE_ACCESS_REF
 
 ## Uninstalling
 
-To remove all Snowflake Data Lake Explorer objects from your account:
+To remove all Data Lake Explorer objects from your account:
 
 **Mac/Linux:**
 ```bash
@@ -204,12 +203,25 @@ data-lake-explorer/
 
 ### Snowflake Permissions
 
-**Setup requires ACCOUNTADMIN** to create the database, schema, and task.
+The deploying role requires the following privileges:
+
+| Privilege | Purpose |
+|-----------|---------|
+| `CREATE DATABASE ON ACCOUNT` | Create the `SNOWFLAKE_DATA_LAKE` database |
+| `CREATE SCHEMA` | Create the `DATA_LAKE_ACCESS` schema |
+| `CREATE TABLE`, `CREATE STAGE`, `CREATE PROCEDURE` | Create objects in the schema |
+| `CREATE TASK`, `EXECUTE TASK` | Create and run the scheduled refresh task |
+| `IMPORTED PRIVILEGES ON DATABASE SNOWFLAKE` | Access to `account_usage` views |
 
 The app queries data from `snowflake.account_usage` views:
 - `snowflake.account_usage.sessions`
 - `snowflake.account_usage.query_history`
 - `snowflake.account_usage.access_history`
+
+> **Note:** Access to `account_usage` views requires `IMPORTED PRIVILEGES` on the shared `SNOWFLAKE` database. This is typically granted by an account administrator:
+> ```sql
+> GRANT IMPORTED PRIVILEGES ON DATABASE SNOWFLAKE TO ROLE <your_role>;
+> ```
 
 The refresh task pre-aggregates this data into `SNOWFLAKE_DATA_LAKE.DATA_LAKE_ACCESS.data_lake_access_30d` for fast dashboard performance.
 

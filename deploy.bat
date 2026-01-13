@@ -5,10 +5,10 @@ REM
 REM Prerequisites:
 REM   1. Snowflake CLI (snow) installed: https://docs.snowflake.com/en/developer-guide/snowflake-cli
 REM   2. Connection configured: snow connection add
-REM   3. ACCOUNTADMIN role access
+REM   3. Role with required privileges (see snowflake_data_set_up.sql header)
 REM
 REM Usage:
-REM   deploy.bat [connection_name] [warehouse_name]
+REM   deploy.bat <connection_name> [warehouse_name]
 REM
 REM Example:
 REM   deploy.bat my_snowflake_connection COMPUTE_WH
@@ -32,7 +32,7 @@ echo.
 
 REM Step 1: Run the setup SQL to create database, schema, table, and task
 echo [1/3] Setting up database, schema, and refresh task...
-snow sql --connection %CONNECTION% --filename snowflake_data_set_up.sql --role ACCOUNTADMIN --warehouse %WAREHOUSE%
+snow sql --connection %CONNECTION% --filename snowflake_data_set_up.sql --warehouse %WAREHOUSE%
 if errorlevel 1 (
     echo ERROR: Failed to run setup SQL. Please check your connection and permissions.
     exit /b 1

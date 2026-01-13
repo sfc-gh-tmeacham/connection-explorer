@@ -1,6 +1,6 @@
 import base64
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Sequence, Tuple
 
 import altair as alt
 import pandas as pd
@@ -439,26 +439,38 @@ def get_theme_colors() -> Tuple[bool, str]:
 
 
 @st.cache_data(show_spinner=False)
-def apply_filters(df: pd.DataFrame, database_name: str, warehouse_name: str, 
-                 client_name: str, org_filter: str, direction_filter: str, 
-                 access_count: int) -> pd.DataFrame:
-    """Apply filters to dataframe with caching"""
-    query_parts = [f"ACCESS_COUNT > {access_count}"]
-    if database_name:
-        query_parts.append(f"DATABASE.str.contains('{database_name}')")
-    if warehouse_name:
-        query_parts.append(f"WAREHOUSE.str.contains('{warehouse_name}')")
-    if client_name:
-        query_parts.append(f"CLIENT.str.contains('{client_name}')")
-    if org_filter:
-        query_parts.append(f"ORGANIZATION_NAME.str.contains('{org_filter}')")
-    if direction_filter:
-        query_parts.append(f"DIRECTION == '{direction_filter}'")
+def apply_filters(
+    df: pd.DataFrame,
+    database_names: Sequence[str],
+    warehouse_names: Sequence[str],
+    client_names: Sequence[str],
+    org_filter: str,
+    direction_filters: Sequence[str],
+    access_count: int,
+) -> pd.DataFrame:
+    """Apply filters to dataframe with caching.
 
-    filtered = df
-    if query_parts:
-        filtered = filtered.query(" & ".join(query_parts))
-    return filtered
+    Sidebar filters are multi-selects, so most filters accept a list/tuple of values.
+    Filtering is implemented with boolean masks (no string-built df.query).
+    """
+    if df.empty:
+        return df
+
+    mask = df["ACCESS_COUNT"] > access_count
+
+    if database_names:
+        mask &= df["DATABASE"].astype(str).isin(list(database_names))
+    if warehouse_names:
+        mask &= df["WAREHOUSE"].astype(str).isin(list(warehouse_names))
+    if client_names:
+        mask &= df["CLIENT"].astype(str).isin(list(client_names))
+    if org_filter:
+        # Org filter is currently disabled in the UI, but keep the hook for future use.
+        mask &= df["ORGANIZATION_NAME"].astype(str).str.contains(org_filter, na=False)
+    if direction_filters:
+        mask &= df["DIRECTION"].astype(str).isin(list(direction_filters))
+
+    return df.loc[mask]
 
 def build_network_html(df: pd.DataFrame, _node_images: Dict[str, str], fullscreen: bool = False) -> str:
     """Build network visualization HTML."""
@@ -796,8 +808,8 @@ def prepare_chart_data(df: pd.DataFrame, column: str, top_n: int = 10) -> pd.Dat
 def get_distinct_values(df: pd.DataFrame, column: str) -> list:
     """Get distinct values for filter dropdowns"""
     if df.empty:
-        return [""]
-    return [""] + sorted(df[column].astype(str).unique().tolist())
+        return []
+    return sorted(df[column].astype(str).unique().tolist())
 
 
 def sidebar_filters(df: pd.DataFrame) -> pd.DataFrame:
@@ -806,7 +818,7 @@ def sidebar_filters(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
         return df
 
-    # Define selectbox filters: (name, column, label)
+    # Define multi-select filters: (name, column, label)
     filter_configs = [
         ("database", "DATABASE", "Select Database"),
         ("warehouse", "WAREHOUSE", "Select Warehouse"),
@@ -819,12 +831,12 @@ def sidebar_filters(df: pd.DataFrame) -> pd.DataFrame:
     for name, col, label in filter_configs:
         options = get_distinct_values(df, col)
         persist_key, widget_key = f"persist_filter_{name}", f"widget_filter_{name}"
-        persist_val = st.session_state.get(persist_key, "")
-        if persist_val not in options:
-            persist_val = ""
-        if widget_key not in st.session_state:
-            st.session_state[widget_key] = persist_val
-        values[name] = st.sidebar.selectbox(label, options, key=widget_key)
+        persisted = st.session_state.get(persist_key, [])
+        if isinstance(persisted, str):
+            persisted = [persisted] if persisted else []
+        # Only keep persisted values that still exist in options.
+        default_vals = [v for v in persisted if v in options]
+        values[name] = st.sidebar.multiselect(label, options, default=default_vals, key=widget_key)
         st.session_state[persist_key] = values[name]
 
     # Numeric access_count filter
@@ -844,8 +856,15 @@ def sidebar_filters(df: pd.DataFrame) -> pd.DataFrame:
                                      help="Limit rows shown in the network graph (by top access count)")
     st.session_state["persist_filter_row_limit"] = row_limit
 
-    filtered_df = apply_filters(df, values["database"], values["warehouse"], values["client"],
-                                "", values["direction"], access_count)  # org filter disabled
+    filtered_df = apply_filters(
+        df,
+        tuple(values["database"]),
+        tuple(values["warehouse"]),
+        tuple(values["client"]),
+        "",
+        tuple(values["direction"]),
+        access_count,
+    )  # org filter disabled
     return filtered_df.head(row_limit) if len(filtered_df) > row_limit else filtered_df
 
 def _configure_chart(chart: alt.Chart, text_color: str, grid_color: str, domain_color: str) -> alt.Chart:
@@ -925,17 +944,28 @@ def main() -> None:
     # Initialize persist_* filter defaults in session state if not present
     # These keys are never used as widget keys, so Streamlit won't clean them up
     filter_defaults = {
-        "persist_filter_database": "",
-        "persist_filter_warehouse": "",
-        "persist_filter_client": "",
+        "persist_filter_database": [],
+        "persist_filter_warehouse": [],
+        "persist_filter_client": [],
         "persist_filter_org": "",
-        "persist_filter_direction": "",
+        "persist_filter_direction": [],
         "persist_filter_access_count": 1,
         "persist_filter_row_limit": 500,
     }
     for key, default in filter_defaults.items():
         if key not in st.session_state:
             st.session_state[key] = default
+
+    # Backward-compat: older sessions may have stored these as strings (single-select).
+    for key in (
+        "persist_filter_database",
+        "persist_filter_warehouse",
+        "persist_filter_client",
+        "persist_filter_direction",
+    ):
+        val = st.session_state.get(key, [])
+        if isinstance(val, str):
+            st.session_state[key] = [val] if val else []
     
     is_fullscreen = st.session_state.get("full_screen_mode", False)
     
@@ -1024,11 +1054,11 @@ def main() -> None:
         # Apply filters from persist_* keys (these survive fullscreen transitions)
         filtered_df = apply_filters(
             processed_df,
-            database_name=st.session_state.get("persist_filter_database", ""),
-            warehouse_name=st.session_state.get("persist_filter_warehouse", ""),
-            client_name=st.session_state.get("persist_filter_client", ""),
+            database_names=tuple(st.session_state.get("persist_filter_database", []) or []),
+            warehouse_names=tuple(st.session_state.get("persist_filter_warehouse", []) or []),
+            client_names=tuple(st.session_state.get("persist_filter_client", []) or []),
             org_filter=st.session_state.get("persist_filter_org", ""),
-            direction_filter=st.session_state.get("persist_filter_direction", ""),
+            direction_filters=tuple(st.session_state.get("persist_filter_direction", []) or []),
             access_count=st.session_state.get("persist_filter_access_count", 1),
         )
         # Apply row limit from session state
