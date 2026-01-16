@@ -847,13 +847,13 @@ def sidebar_filters(df: pd.DataFrame) -> pd.DataFrame:
                                            help="Please enter a number between 1 and 1,000,000")
     st.session_state["persist_filter_access_count"] = access_count
 
-    # Row limit filter
+    # Node limit filter
     row_limit_options = [100, 250, 500, 1000, 2500]
     if "widget_filter_row_limit" not in st.session_state:
         persist_row = st.session_state.get("persist_filter_row_limit", 500)
         st.session_state["widget_filter_row_limit"] = persist_row if persist_row in row_limit_options else 500
-    row_limit = st.sidebar.selectbox("Graph Row Limit", row_limit_options, key="widget_filter_row_limit",
-                                     help="Limit rows shown in the network graph (by top access count)")
+    row_limit = st.sidebar.selectbox("Graph Node Limit", row_limit_options, key="widget_filter_row_limit",
+                                     help="Limit nodes shown in the network graph (by top access count)")
     st.session_state["persist_filter_row_limit"] = row_limit
 
     filtered_df = apply_filters(
