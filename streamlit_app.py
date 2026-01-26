@@ -479,9 +479,14 @@ def build_network_html(df: pd.DataFrame, _node_images: Dict[str, str], fullscree
 
     current_account = get_current_account()
 
-    # Default colors (will be overridden by theme-aware JavaScript)
-    bg_color = "#ffffff"
-    font_color = "#000000"
+    # Detect theme server-side to set correct initial colors (avoids flash on load)
+    is_dark, text_color = get_theme_colors()
+    try:
+        theme_bg = st.get_option("theme.backgroundColor")
+        bg_color = theme_bg if isinstance(theme_bg, str) and theme_bg.startswith("#") else ("#0e1117" if is_dark else "#ffffff")
+    except Exception:
+        bg_color = "#0e1117" if is_dark else "#ffffff"
+    font_color = text_color
 
     # Use 100% height for fullscreen mode
     network_height = "100vh" if fullscreen else "680px"
@@ -599,6 +604,101 @@ def build_network_html(df: pd.DataFrame, _node_images: Dict[str, str], fullscree
 
     html = net.generate_html(notebook=False)
 
+    # CSS to inject into <head> - detects actual parent colors, falls back to media queries
+    head_css = """
+    <link href="https://fonts.googleapis.com/css2?family=Lato:wght@300;400;700;900&display=swap" rel="stylesheet">
+    <style>
+      /* Default: light theme */
+      :root {
+        --pyvis-bg: #ffffff;
+        --pyvis-fg: #14171a;
+      }
+      /* Dark theme via media query as fallback */
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --pyvis-bg: #0e1117;
+          --pyvis-fg: #fafafa;
+        }
+      }
+    </style>
+    <script>
+    // Immediately detect actual parent colors and override CSS variables
+    (function() {
+      try {
+        var pdoc = window.parent.document;
+        var app = pdoc.querySelector('.stApp');
+        if (app) {
+          var bg = window.parent.getComputedStyle(app).backgroundColor;
+          var fg = window.parent.getComputedStyle(app).color;
+          if (bg && bg !== 'transparent' && bg !== 'rgba(0, 0, 0, 0)') {
+            document.documentElement.style.setProperty('--pyvis-bg', bg);
+          }
+          if (fg && fg !== 'transparent' && fg !== 'rgba(0, 0, 0, 0)') {
+            document.documentElement.style.setProperty('--pyvis-fg', fg);
+          }
+        }
+      } catch(e) {}
+    })();
+    </script>
+    <style>
+      html, body { 
+        margin: 0; 
+        padding: 0; 
+        background-color: var(--pyvis-bg) !important;
+        color: var(--pyvis-fg) !important;
+        font-family: 'Lato', -apple-system, BlinkMacSystemFont, sans-serif !important;
+      }
+      #mynetwork { 
+        border: 0 !important; 
+        background-color: var(--pyvis-bg) !important;
+      }
+      /* Style vis.js loading bar - transparent background, no border/shadow, Snowflake font */
+      #loadingBar {
+        background: transparent !important;
+        color: var(--pyvis-fg) !important;
+        font-family: 'Lato', -apple-system, BlinkMacSystemFont, sans-serif !important;
+      }
+      #loadingBar .outerBorder {
+        background: transparent !important;
+        border: 2px solid rgba(128, 128, 128, 0.5) !important;
+        box-shadow: none !important;
+      }
+      #loadingBar .border {
+        background: transparent !important;
+        border: 1px solid rgba(128, 128, 128, 0.5) !important;
+        box-shadow: none !important;
+      }
+      #loadingBar #text {
+        color: var(--pyvis-fg) !important;
+        font-family: 'Lato', -apple-system, BlinkMacSystemFont, sans-serif !important;
+        font-weight: 400 !important;
+      }
+      #loadingBar #percentage {
+        color: var(--pyvis-fg) !important;
+        font-family: 'Lato', -apple-system, BlinkMacSystemFont, sans-serif !important;
+        font-weight: 700 !important;
+      }
+      #loadingBar #bar {
+        border: none !important;
+        box-shadow: none !important;
+      }
+      /* Style vis.js tooltips - theme-aware */
+      div.vis-tooltip {
+        font-family: 'Lato', -apple-system, BlinkMacSystemFont, sans-serif !important;
+        font-size: 12px !important;
+        background-color: var(--pyvis-bg) !important;
+        color: var(--pyvis-fg) !important;
+        border: 1px solid rgba(128, 128, 128, 0.3) !important;
+        border-radius: 4px !important;
+        padding: 8px 10px !important;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15) !important;
+        line-height: 1.5 !important;
+        white-space: pre-line !important;
+        max-width: 300px !important;
+      }
+    </style>
+    """
+
     # JavaScript that polls parent theme and uses actual computed colors
     theme_js = """
     <script>
@@ -682,10 +782,21 @@ def build_network_html(df: pd.DataFrame, _node_images: Dict[str, str], fullscree
         lastBg = bgColor;
         lastFg = fgColor;
 
-        // Set backgrounds to match parent exactly
+        // Update CSS custom properties so all styled elements update
+        document.documentElement.style.setProperty('--pyvis-bg', bgColor);
+        document.documentElement.style.setProperty('--pyvis-fg', fgColor);
+        
+        // Also set inline styles for immediate effect
         document.body.style.backgroundColor = bgColor;
+        document.body.style.color = fgColor;
         var container = document.getElementById('mynetwork');
         if (container) container.style.backgroundColor = bgColor;
+        
+        // Style loading bar text to match theme
+        var loadingText = document.getElementById('text');
+        var loadingPct = document.getElementById('percentage');
+        if (loadingText) loadingText.style.color = fgColor;
+        if (loadingPct) loadingPct.style.color = fgColor;
 
         // Update canvas background
         var canvas = document.querySelector('canvas');
@@ -752,37 +863,17 @@ def build_network_html(df: pd.DataFrame, _node_images: Dict[str, str], fullscree
       applyTheme();
     })();
     </script>
-    <style>
-      html, body { margin: 0; padding: 0; background: transparent !important; }
-      #mynetwork { border: 0 !important; }
-      /* Style vis.js tooltips to match Altair/Vega tooltips - theme-aware */
-      :root {
-        --tooltip-bg: #ffffff;
-        --tooltip-text: #1f2937;
-        --tooltip-shadow: rgba(0, 0, 0, 0.15);
-        --tooltip-border: #e5e7eb;
-      }
-      div.vis-tooltip {
-        font-family: 'Lato', -apple-system, BlinkMacSystemFont, sans-serif !important;
-        font-size: 12px !important;
-        background-color: var(--tooltip-bg) !important;
-        color: var(--tooltip-text) !important;
-        border: 1px solid var(--tooltip-border) !important;
-        border-radius: 4px !important;
-        padding: 8px 10px !important;
-        box-shadow: 0 2px 8px var(--tooltip-shadow) !important;
-        line-height: 1.5 !important;
-        white-space: pre-line !important;
-        max-width: 300px !important;
-      }
-    </style>
     """
 
-    # Insert before closing body
+    # Inject CSS into <head> so it applies before any rendering
+    if "</head>" in html:
+        html = html.replace("</head>", head_css + "\n</head>")
+    
+    # Inject JavaScript before closing body
     if "</body>" in html:
         html = html.replace("</body>", theme_js + "\n</body>")
     else:
-        html = html + theme_js
+        html = html + head_css + theme_js
 
     return html
 
