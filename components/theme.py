@@ -8,10 +8,11 @@ import streamlit as st
 RGB = Tuple[int, int, int]
 
 # Snowflake Brand Colors (https://www.snowflake.com/brand-guidelines/)
-SNOWFLAKE_BLUE = "#29B5E8"  # Core Brand Blue
+SNOWFLAKE_BLUE = "#29B5E8"  # Core Brand Blue — used for read edges
 MID_BLUE = "#11567F"        # Contrasting Blue
 STAR_BLUE = "#71D3DC"       # Accent Blue (used in dark mode charts)
 MIDNIGHT = "#000000"        # Dark text fallback
+AMBER = "#F5A623"           # Write/ingest edge color
 
 CUSTOM_CSS = """
     <style>

@@ -23,40 +23,56 @@ def sample_dataframe(session) -> pd.DataFrame:
     """Generate sample data for demo/local development."""
     current_account = get_current_account(session)
     sample_data = {
-        "ORGANIZATION_NAME": ["SAMPLE_ORG"] * 8,
-        "ACCOUNT_NAME": [current_account] * 8,
+        "ORGANIZATION_NAME": ["SAMPLE_ORG"] * 20,
+        "ACCOUNT_NAME": [current_account] * 20,
         "DATABASE": [
-            "PROD_DB",
-            "TEST_DB",
-            "DEV_DB",
-            "ANALYTICS_DB",
-            "PROD_DB",
-            "TEST_DB",
-            "REPORTING_DB",
-            "STAGING_DB",
+            # Readers pulling from prod/analytics
+            "PROD_DB", "PROD_DB", "ANALYTICS_DB", "ANALYTICS_DB",
+            "REPORTING_DB", "PROD_DB", "ANALYTICS_DB", "PROD_DB",
+            # Writers pushing into staging/prod
+            "STAGING_DB", "STAGING_DB", "PROD_DB", "PROD_DB",
+            "STAGING_DB", "PROD_DB", "STAGING_DB", "PROD_DB",
+            # Dual-use: clients that both read and write
+            "STAGING_DB", "ANALYTICS_DB", "PROD_DB", "PROD_DB",
         ],
         "WAREHOUSE": [
-            "COMPUTE_WH",
-            "TEST_WH",
-            "DEV_WH",
-            "ANALYTICS_WH",
-            "COMPUTE_WH",
-            "TEST_WH",
-            "REPORTING_WH",
-            "STAGING_WH",
+            # Readers
+            "REPORTING_WH", "REPORTING_WH", "ANALYTICS_WH", "ANALYTICS_WH",
+            "REPORTING_WH", "COMPUTE_WH", "ANALYTICS_WH", "COMPUTE_WH",
+            # Writers
+            "LOADING_WH", "LOADING_WH", "LOADING_WH", "TRANSFORM_WH",
+            "LOADING_WH", "TRANSFORM_WH", "LOADING_WH", "TRANSFORM_WH",
+            # Dual-use
+            "TRANSFORM_WH", "ANALYTICS_WH", "TRANSFORM_WH", "ANALYTICS_WH",
         ],
         "CLIENT": [
-            "CLIENT_A",
-            "CLIENT_B",
-            "CLIENT_C",
-            "CLIENT_A",
-            "CLIENT_B",
-            "CLIENT_C",
-            "CLIENT_A",
-            "CLIENT_B",
+            # Readers — BI tools and query tools
+            "Power BI", "Tableau", "Python", "Snowflake Web",
+            "Sigma", "DBeaver", "MicroStrategy", "Excel",
+            # Writers — ELT/ETL and ingestion tools
+            "Fivetran", "Airflow", "Snowpark", "Databricks/Spark",
+            "Kafka", "Informatica Cloud", "Alteryx", "Coalesce",
+            # Dual-use — Python also writes, Snowpark also reads
+            "Python", "Snowpark", "Databricks/Spark", "Airflow",
         ],
-        "DIRECTION": ["out", "in", "out", "in", "out", "in", "out", "in"],
-        "ACCESS_COUNT": [1500, 2300, 800, 1200, 950, 1800, 2100, 750],
+        "DIRECTION": [
+            # Readers
+            "read", "read", "read", "read",
+            "read", "read", "read", "read",
+            # Writers
+            "write", "write", "write", "write",
+            "write", "write", "write", "write",
+            # Dual-use
+            "write", "read", "read", "read",
+        ],
+        "ACCESS_COUNT": [
+            # Readers
+            3200, 2800, 1900, 1500, 1100, 850, 750, 400,
+            # Writers
+            4500, 3100, 2600, 2200, 1800, 1400, 950, 600,
+            # Dual-use
+            1700, 1300, 900, 550,
+        ],
     }
     st.info(
         "Using sample data. Connect to Snowflake to view live account usage data "

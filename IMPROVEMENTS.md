@@ -16,7 +16,7 @@
 
 - [ ] **Missing Date/Time Context** — The data covers 30 days but there's no date column exposed in the UI. Users can't see trends over time or filter by date range.
 
-- [ ] **No Node Images for Clients** — Databases and warehouses get custom icons, but client application nodes are rendered as default vis.js nodes. Adding icons for major clients (Tableau, dbt, Python, etc.) would improve the visualization.
+- [x] **No Node Images for Clients** — Databases and warehouses get custom icons, but client application nodes are rendered as default vis.js nodes. Adding icons for major clients (Tableau, dbt, Python, etc.) would improve the visualization.
 
 - [ ] **Caching Could Cause Stale Data** — `load_data()` has a 5-minute TTL, but `process_dataframe()` has no TTL at all (cached forever until manual refresh). If underlying data changes, processed results go stale.
 

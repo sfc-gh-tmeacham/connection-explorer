@@ -6,8 +6,9 @@ import pandas as pd
 import streamlit as st
 from pyvis.network import Network
 
+from components.client_mappings import generate_client_icon_uri
 from components.data import get_current_account
-from components.theme import SNOWFLAKE_BLUE, get_theme_colors
+from components.theme import AMBER, SNOWFLAKE_BLUE, get_theme_colors
 
 
 def build_network_html(df: pd.DataFrame, _node_images: Dict[str, str], session, fullscreen: bool = False) -> str:
@@ -87,58 +88,90 @@ def build_network_html(df: pd.DataFrame, _node_images: Dict[str, str], session, 
         org_name = row["ORGANIZATION_NAME"]
         client = row["CLIENT"]
 
-        if direction == "write" or direction == "DML":
-            src = warehouse
-            dst = database
-            src_type = "Warehouse"
-            dst_type = "Database"
-            src_image = _node_images["warehouse"]
-            dst_image = _node_images["database"]
-        else: # read
-            src = database
-            dst = warehouse
-            src_type = "Database"
-            dst_type = "Warehouse"
-            src_image = _node_images["database"]
-            dst_image = _node_images["warehouse"]
+        # Shared node styling helper
+        transparent = {"background": "rgba(0,0,0,0)", "border": "rgba(0,0,0,0)", "highlight": {"background": "rgba(0,0,0,0)", "border": "rgba(0,0,0,0)"}}
+        shape_props = {"useBorderWithImage": True, "borderType": "circle"}
 
+        # Always add database and warehouse nodes (idempotent — pyvis deduplicates by id)
         net.add_node(
-            src,
-            label=src,
-            title=f"{src_type}: {src}\nOrganization: {org_name}\nAccount: {current_account}",
+            database,
+            label=database,
+            title=f"Database: {database}\nOrganization: {org_name}\nAccount: {current_account}",
             size=200,
-            color={"background": "rgba(0,0,0,0)", "border": "rgba(0,0,0,0)", "highlight": {"background": "rgba(0,0,0,0)", "border": "rgba(0,0,0,0)"}},
+            color=transparent,
             shape="image",
-            shapeProperties={"useBorderWithImage": True, "borderType": "circle"},
+            shapeProperties=shape_props,
             borderWidth=0,
-            image=src_image,
+            image=_node_images["database"],
         )
         net.add_node(
-            dst,
-            label=dst,
-            title=f"{dst_type}: {dst}\nOrganization: {org_name}\nAccount: {current_account}",
+            warehouse,
+            label=warehouse,
+            title=f"Warehouse: {warehouse}\nOrganization: {org_name}\nAccount: {current_account}",
             size=200,
-            color={"background": "rgba(0,0,0,0)", "border": "rgba(0,0,0,0)", "highlight": {"background": "rgba(0,0,0,0)", "border": "rgba(0,0,0,0)"}},
+            color=transparent,
             shape="image",
-            shapeProperties={"useBorderWithImage": True, "borderType": "circle"},
-            image=dst_image,
+            shapeProperties=shape_props,
+            borderWidth=0,
+            image=_node_images["warehouse"],
         )
-        
-        net.add_edge(
-            src, 
-            dst, 
-            value=ac, 
-            color=SNOWFLAKE_BLUE,
-            label=client, 
-            arrowStrikethrough=False,
-            font={
-                'size': 48,
-                'align': 'middle',
-                'strokeWidth': 2,
-                'strokeColor': font_color,
-                'color': font_color
-            }
+
+        # Add client as its own node with a generated SVG icon
+        client_icon = generate_client_icon_uri(client)
+        net.add_node(
+            client,
+            label=client,
+            title=f"Client: {client}\nOrganization: {org_name}\nAccount: {current_account}",
+            size=120,
+            color=transparent,
+            shape="image",
+            shapeProperties=shape_props,
+            borderWidth=0,
+            image=client_icon,
         )
+
+        # 3-tier topology: direction determines edge flow and color
+        # write/DML/DDL: client → warehouse → database (amber)
+        # read/metadata: database → warehouse → client (blue)
+        edge_color = AMBER if direction in ("write", "DML", "DDL") else SNOWFLAKE_BLUE
+        edge_font = {
+            'size': 36,
+            'align': 'middle',
+            'strokeWidth': 2,
+            'strokeColor': font_color,
+            'color': font_color,
+        }
+
+        if direction in ("write", "DML", "DDL"):
+            net.add_edge(
+                client, warehouse,
+                value=ac,
+                color=edge_color,
+                arrowStrikethrough=False,
+                font=edge_font,
+            )
+            net.add_edge(
+                warehouse, database,
+                value=ac,
+                color=edge_color,
+                arrowStrikethrough=False,
+                font=edge_font,
+            )
+        else:  # read, metadata, out, in
+            net.add_edge(
+                database, warehouse,
+                value=ac,
+                color=edge_color,
+                arrowStrikethrough=False,
+                font=edge_font,
+            )
+            net.add_edge(
+                warehouse, client,
+                value=ac,
+                color=edge_color,
+                arrowStrikethrough=False,
+                font=edge_font,
+            )
 
     html = net.generate_html(notebook=False)
 
@@ -234,7 +267,55 @@ def build_network_html(df: pd.DataFrame, _node_images: Dict[str, str], session, 
         white-space: pre-line !important;
         max-width: 300px !important;
       }
+      /* Legend overlay */
+      #graph-legend {
+        position: absolute;
+        bottom: 16px;
+        left: 16px;
+        background-color: var(--pyvis-bg);
+        color: var(--pyvis-fg);
+        border: 1px solid rgba(128, 128, 128, 0.3);
+        border-radius: 6px;
+        padding: 10px 14px;
+        font-family: 'Lato', -apple-system, BlinkMacSystemFont, sans-serif;
+        font-size: 12px;
+        line-height: 1.6;
+        z-index: 100;
+        opacity: 0.9;
+      }
+      #graph-legend .legend-title {
+        font-weight: 700;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: 4px;
+        opacity: 0.7;
+      }
+      #graph-legend .legend-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      #graph-legend .legend-line {
+        width: 24px;
+        height: 3px;
+        border-radius: 2px;
+      }
     </style>
+    """
+
+    legend_html = f"""
+    <div id="graph-legend">
+      <div class="legend-title">Edge Direction</div>
+      <div class="legend-item">
+        <span class="legend-line" style="background-color: {SNOWFLAKE_BLUE};"></span>
+        <span>Read</span>
+      </div>
+      <div class="legend-item">
+        <span class="legend-line" style="background-color: {AMBER};"></span>
+        <span>Write</span>
+      </div>
+    </div>
     """
 
     # JavaScript that polls parent theme and uses actual computed colors
@@ -407,9 +488,9 @@ def build_network_html(df: pd.DataFrame, _node_images: Dict[str, str], session, 
     if "</head>" in html:
         html = html.replace("</head>", head_css + "\n</head>")
     
-    # Inject JavaScript before closing body
+    # Inject JavaScript and legend before closing body
     if "</body>" in html:
-        html = html.replace("</body>", theme_js + "\n</body>")
+        html = html.replace("</body>", legend_html + theme_js + "\n</body>")
     else:
         html = html + head_css + theme_js
 
