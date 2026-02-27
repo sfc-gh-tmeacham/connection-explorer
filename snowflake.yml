@@ -16,3 +16,5 @@ streamlit:
     - components/data.py
     - components/network.py
     - components/charts.py
+    - components/client_mappings.py
+    - components/setup.py

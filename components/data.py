@@ -5,6 +5,8 @@ from typing import Sequence
 import pandas as pd
 import streamlit as st
 
+from components.setup import ensure_tables_exist
+
 
 @st.cache_data(show_spinner=False, ttl=3600)
 def get_current_account(session) -> str:
@@ -69,6 +71,7 @@ def load_data(session) -> pd.DataFrame:
     if session is None:
         return sample_dataframe(session)
     try:
+        ensure_tables_exist(session)
         query = """
             SELECT account_id AS ACCOUNT_NAME, * 
             FROM SNOWFLAKE_DATA_LAKE.DATA_LAKE_ACCESS.data_lake_access_30d 

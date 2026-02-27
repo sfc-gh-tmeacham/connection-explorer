@@ -28,7 +28,123 @@ CREATE TABLE IF NOT EXISTS SNOWFLAKE_DATA_LAKE.DATA_LAKE_ACCESS.data_lake_access
     access_count NUMBER
 );
 
+-- Create the client application classification lookup table
+-- This replaces the 70+ line CASE/WHEN block with a maintainable table.
+-- Priority determines match order (lower = higher priority).
+-- source_field: "application" matches the parsed APPLICATION field,
+--               "client_app_id" matches the raw CLIENT_APPLICATION_ID.
+CREATE TABLE IF NOT EXISTS SNOWFLAKE_DATA_LAKE.DATA_LAKE_ACCESS.client_app_classification (
+    priority       NUMBER,
+    pattern        VARCHAR,
+    source_field   VARCHAR,
+    display_name   VARCHAR
+);
+
+-- Seed classification mappings (idempotent via MERGE)
+MERGE INTO SNOWFLAKE_DATA_LAKE.DATA_LAKE_ACCESS.client_app_classification AS tgt
+USING (
+    SELECT column1 AS priority, column2 AS pattern, column3 AS source_field, column4 AS display_name
+    FROM VALUES
+        (0, '%snowpark%', 'client_app_id', 'Snowpark'),
+        (1, '%SNOWPARK%', 'application', 'Snowpark'),
+        (2, '%deployments%', 'application', 'Kafka'),
+        (3, '%cosmos%', 'application', 'COSMOS'),
+        (4, '%rappid%', 'application', 'RAPPID'),
+        (5, '%dtlk%', 'application', 'DTLK'),
+        (6, '%nice%', 'application', 'NICE'),
+        (7, '%nexis%', 'application', 'NEXIS'),
+        (8, '%MASHUP%', 'application', 'Power BI'),
+        (9, '%POWERBI%', 'application', 'Power BI'),
+        (10, '%microsoftonprem%', 'application', 'Power BI'),
+        (11, '%adbc%go%', 'application', 'ADBC-Go'),
+        (12, '%DTS%', 'application', 'SSIS'),
+        (13, '%DTEXEC%', 'application', 'SSIS'),
+        (14, '%datastage%', 'application', 'IBM DataStage'),
+        (15, '%REPORTSERVER%', 'application', 'SSRS/PBIRS'),
+        (16, '%MSRS%', 'application', 'SSRS/PBIRS'),
+        (17, '%REPORTINGSERVICE%', 'application', 'SSRS/PBIRS'),
+        (18, '%REPORTBUILDER%', 'application', 'SSRS/PBIRS'),
+        (19, '%VISUALSTUDIO%', 'application', 'SSRS/PBIRS'),
+        (20, '%SQLSe%', 'application', 'SQL Server'),
+        (21, '%GRAFANA%', 'application', 'Grafana'),
+        (22, '%CIRRUS%', 'application', 'Cirrus CI'),
+        (23, '%TOAD%', 'application', 'Toad'),
+        (24, '%BOOTSTRAP%', 'application', 'Tomcat'),
+        (25, '%QLIKREPL%', 'application', 'Qlik Replicate'),
+        (26, '%rstudio%', 'application', 'RStudio'),
+        (27, '%MicroStrat%', 'application', 'MicroStrategy'),
+        (28, '%TABLEAU%', 'application', 'Tableau'),
+        (29, '%HYPERION%', 'application', 'Hyperion'),
+        (30, '%softoffice%', 'application', 'Microsoft Office'),
+        (31, '%msacces%', 'application', 'Microsoft Access'),
+        (32, '%DATABRICKS%', 'application', 'Databricks/Spark'),
+        (33, '%dbatch%', 'application', 'Databricks/Spark'),
+        (34, '%SPARK%', 'application', 'Databricks/Spark'),
+        (35, '%ALTERYX%', 'application', 'Alteryx'),
+        (36, '%INFA_DI%', 'application', 'Informatica Cloud'),
+        (37, '%CDATA%', 'application', 'CData'),
+        (38, '%fivetran%', 'application', 'Fivetran'),
+        (39, '%tibco%', 'application', 'Tibco Spotfire'),
+        (40, '%palantir%', 'application', 'Palantir'),
+        (41, '%PERL%', 'application', 'Perl'),
+        (42, '%iis%', 'application', 'Microsoft IIS'),
+        (43, '%inets%', 'application', 'Microsoft IIS'),
+        (44, '%w3wp%', 'application', 'Microsoft IIS'),
+        (45, '%BUSINESSOBJECTS%', 'application', 'Business Objects'),
+        (46, '%bobj%', 'application', 'Business Objects'),
+        (47, '%DOMO%', 'application', 'Domo'),
+        (48, '%astronomer%', 'application', 'Astronomer'),
+        (49, '%DATAFACTORY%', 'application', 'Azure Data Factory'),
+        (50, '%INTEGRATIONRUNTIME%', 'application', 'Azure Data Factory'),
+        (51, '%EXCEL%', 'application', 'Excel'),
+        (52, '%SNOWFLAKE%', 'application', 'Snowflake Web'),
+        (53, '%JARVIS%', 'application', 'Jarvis'),
+        (54, '%WEBJOBS%', 'application', 'Azure App Service/WebJobs'),
+        (55, '%JENKINS%', 'application', 'Jenkins'),
+        (56, '%KAFKA%', 'application', 'Kafka'),
+        (57, '%airflow%', 'application', 'Airflow'),
+        (58, '%starburst%', 'application', 'Starburst'),
+        (59, '%prest%', 'application', 'Presto'),
+        (60, '%boomi%', 'application', 'Boomi'),
+        (61, '%SAS%', 'application', 'SAS'),
+        (62, '%arcgis%', 'application', 'ArcGIS'),
+        (63, '%dbeave%', 'application', 'DBeaver'),
+        (64, '%vscode%', 'application', 'VSCode'),
+        (65, '%teradata%', 'application', 'Teradata'),
+        (66, '%powershell%', 'application', 'PowerShell'),
+        (67, '%uipath%', 'application', 'UiPath'),
+        (68, '%fads%', 'application', 'Fads'),
+        (69, '%snowcli%', 'application', 'SnowCLI'),
+        (70, '%intellij%', 'application', 'IntelliJ'),
+        (71, '%sigma%', 'application', 'Sigma'),
+        (72, '%talend%', 'application', 'Talend'),
+        (73, '%thoughspot%', 'application', 'ThoughtSpot'),
+        (74, '%install4j%', 'application', 'install4j'),
+        (75, '%cognos%', 'application', 'Cognos'),
+        (76, '%nimbus%', 'application', 'Nimbus'),
+        (77, '%surefire%', 'application', 'Apache Maven Surefire'),
+        (78, '%dataiku%', 'application', 'Dataiku'),
+        (79, '%laserfiche%', 'application', 'Laserfiche'),
+        (80, '%coalesce%', 'application', 'Coalesce'),
+        (81, '%wherescape%', 'application', 'WhereScape'),
+        (82, '%salesforce%', 'application', 'Salesforce'),
+        (83, '%diffcheck%', 'application', 'Diffchecker'),
+        (84, '%flyspeed%', 'application', 'FlySpeed SQL'),
+        (85, '%AdvancedQuery%', 'application', 'AdvancedQueryTool'),
+        (86, '%python%', 'application', 'Python'),
+        (87, '%SNOWFLAKE%', 'client_app_id', 'Snowflake Web'),
+        (88, '%JDBC%', 'client_app_id', 'JDBC'),
+        (89, '%javascript%', 'client_app_id', 'Javascript')
+) AS src
+ON tgt.pattern = src.pattern AND tgt.source_field = src.source_field
+WHEN MATCHED THEN UPDATE SET
+    tgt.priority = src.priority,
+    tgt.display_name = src.display_name
+WHEN NOT MATCHED THEN INSERT (priority, pattern, source_field, display_name)
+    VALUES (src.priority, src.pattern, src.source_field, src.display_name);
+
 -- Create the refresh stored procedure
+-- Now uses the client_app_classification lookup table instead of a CASE/WHEN block.
 CREATE OR REPLACE PROCEDURE SNOWFLAKE_DATA_LAKE.DATA_LAKE_ACCESS.REFRESH_DATA_LAKE_ACCESS()
 RETURNS STRING
 LANGUAGE SQL
@@ -41,106 +157,12 @@ BEGIN
         organization_name, account_id, client, warehouse, 
         database, direction, access_count
     )
-    WITH raw_access AS (
+    WITH raw_sessions AS (
         SELECT
-            CURRENT_ORGANIZATION_NAME() as organization_name,
-            q.query_text,
-            CURRENT_ACCOUNT() as account_id,
-            s.client_application_id as CLIENT_APP_ID,
+            CURRENT_ORGANIZATION_NAME() AS organization_name,
+            CURRENT_ACCOUNT() AS account_id,
+            s.client_application_id AS client_app_id,
             PARSE_JSON(s.client_environment):APPLICATION::VARCHAR AS application,
-            case when CLIENT_APP_ID ilike '%snowpark%' then 'Snowpark'
-            when application ilike '%SNOWPARK%' then 'Snowpark'
-            when application ilike '%deployments%' then 'Kafka'
-            when application ilike '%cosmos%' then 'COSMOS'
-            when application ilike '%rappid%' then 'RAPPID'
-            when application ilike '%dtlk%' then 'DTLK'
-            when application ilike '%nice%' then 'NICE'
-            when application ilike '%nexis%' then 'NEXIS'
-            when application ilike '%MASHUP%' then 'Power BI' 
-            when application ilike '%POWERBI%' then 'Power BI' 
-            when application ilike '%microsoftonprem%' then 'Power BI'
-            when application ilike '%adbc%go%' then 'ADBC-Go'
-            when application ilike '%DTS%' then 'SSIS'
-            when application ilike '%DTEXEC%' then 'SSIS'
-            when application ilike '%datastage%' then 'IBM DataStage'
-            when application ilike '%REPORTSERVER%' then 'SSRS/PBIRS'
-            when application ilike '%MSRS%' then 'SSRS/PBIRS'
-            when application ilike '%REPORTINGSERVICE%' then 'SSRS/PBIRS'
-            when application ilike '%REPORTBUILDER%' then 'SSRS/PBIRS'
-            when application ilike '%VISUALSTUDIO%' then 'SSRS/PBIRS'
-            when application ilike '%SQLSe%' then 'SQL Server'
-            when application ilike '%GRAFANA%' then 'Grafana'
-            when application ilike '%CIRRUS%' then 'Cirrus CI'
-            when application ilike '%TOAD%' then 'Toad'
-            when application ilike '%BOOTSTRAP%' then 'Tomcat'
-            when application ilike '%QLIKREPL%' then 'Qlik Replicate'
-            when application ilike '%rstudio%' then 'RStudio'
-            when application ilike '%MicroStrat%' then 'MicroStrategy'
-            when application ilike '%TABLEAU%' then 'Tableau'
-            when application ilike '%HYPERION%' then 'Hyperion'
-            when application ilike '%softoffice%' then 'Microsoft Office'
-            when application ilike '%msacces%' then 'Microsoft Access'
-            when application ilike '%DATABRICKS%' then 'Databricks/Spark'
-            when application ilike '%dbatch%' then 'Databricks/Spark'
-            when application ilike '%SPARK%' then 'Databricks/Spark'
-            when application ilike '%ALTERYX%' then 'Alteryx'
-            when application ilike '%INFA_DI%' then 'Informatica Cloud'
-            when application ilike '%CDATA%' then 'CData'
-            when application ilike '%fivetran%' then 'Fivetran'
-            when application ilike '%tibco%' then 'Tibco Spotfire'
-            when application ilike '%palantir%' then 'Palantir'
-            when application ilike '%PERL%' then 'Perl'
-            when application ilike '%iis%' then 'Microsoft IIS'
-            when application ilike '%inets%' then 'Microsoft IIS'
-            when application ilike '%w3wp%' then 'Microsoft IIS'
-            when application ilike '%BUSINESSOBJECTS%' then 'Business Objects'
-            when application ilike '%bobj%' then 'Business Objects'
-            when application ilike '%DOMO%' then 'Domo'
-            when application ilike '%astronomer%' then 'Astronomer'
-            when application ilike '%DATAFACTORY%' then 'Azure Data Factory'
-            when application ilike '%INTEGRATIONRUNTIME%' then 'Azure Data Factory'
-            when application ilike '%EXCEL%' then 'Excel'
-            when application ilike '%SNOWFLAKE%' then 'Snowflake Web'
-            when application ilike '%JARVIS%' then 'Jarvis'
-            when application ilike '%WEBJOBS%' then 'Azure App Service/WebJobs'
-            when application ilike '%JENKINS%' then 'Jenkins'
-            when application ilike '%KAFKA%' then 'Kafka'
-            when application ilike '%airflow%' then 'Airflow'
-            when application ilike '%starburst%' then 'Starburst'
-            when application ilike '%prest%' then 'Presto'
-            when application ilike '%boomi%' then 'Boomi'
-            when application ilike '%SAS%' then 'SAS'
-            when application ilike '%arcgis%' then 'ArcGIS'
-            when application ilike '%dbeave%' then 'DBeaver'
-            when application ilike '%vscode%' then 'VSCode'
-            when application ilike '%teradata%' then 'Teradata'
-            when application ilike '%powershell%' then 'PowerShell'
-            when application ilike '%uipath%' then 'UiPath'
-            when application ilike '%fads%' then 'Fads'
-            when application ilike '%snowcli%' then 'SnowCLI'
-            when application ilike '%intellij%' then 'IntelliJ'
-            when application ilike '%sigma%' then 'Sigma'
-            when application ilike '%talend%' then 'Talend'
-            when application ilike '%thoughspot%' then 'ThoughSpot'
-            when application ilike '%install4j%' then 'install4j'
-            when application ilike '%cognos%' then 'Cognos'
-            when application ilike '%nimbus%' then 'Nimbus'
-            when application ilike '%surefire%' then 'Apache Maven Surefire'
-            when application ilike '%dataiku%' then 'Dataiku'
-            when application ilike '%laserfiche%' then 'Laserfiche'
-            when application ilike '%coalesce%' then 'Coalesce'
-            when application ilike '%wherescape%' then 'WhereScape'
-            when application ilike '%salesforce%' then 'Salesforce'
-            when application ilike '%diffcheck%' then 'Diffchecker'
-            when application ilike '%flyspeed%' then 'FlySpeed SQL'
-            when application ilike '%AdvancedQuery%' then 'AdvancedQueryTool' 
-            when application IS NULL then case when upper(CLIENT_APP_ID) like '%SNOWFLAKE%' then 'Snowflake Web' 
-            when upper(CLIENT_APP_ID) like '%JDBC%' then 'JDBC' || ifnull(application,'')
-            when CLIENT_APP_ID ilike '%javascript%' then 'Javascript' || ifnull(application,'')
-            else CLIENT_APP_ID || ifnull(application,'') end
-            when CLIENT_APP_ID like '%JDBC%' then 'JDBC:' || application
-            when application ilike '%python%' then 'Python'  
-            else application end as CLIENT,
             q.warehouse_name AS warehouse,
             q.query_type,
             q.query_id,
@@ -154,6 +176,41 @@ BEGIN
         WHERE q.start_time > DATEADD(day, -30, CURRENT_DATE())
             AND q.query_type != 'CALL'
             AND s.client_application_id NOT LIKE 'SYSTEM%'
+    ),
+    -- Match each session against the classification lookup table.
+    -- A session can match on "application" or "client_app_id"; we keep only
+    -- the highest-priority (lowest priority number) match per row.
+    classified AS (
+        SELECT
+            rs.*,
+            c.display_name,
+            c.priority,
+            ROW_NUMBER() OVER (
+                PARTITION BY rs.query_id, rs.database
+                ORDER BY c.priority ASC
+            ) AS rn
+        FROM raw_sessions rs
+        LEFT JOIN SNOWFLAKE_DATA_LAKE.DATA_LAKE_ACCESS.client_app_classification c
+            ON (c.source_field = 'client_app_id' AND rs.client_app_id ILIKE c.pattern)
+            OR (c.source_field = 'application'   AND rs.application   ILIKE c.pattern)
+    ),
+    raw_access AS (
+        SELECT
+            organization_name,
+            account_id,
+            COALESCE(
+                display_name,
+                CASE
+                    WHEN application IS NOT NULL THEN application
+                    ELSE client_app_id || IFNULL(application, '')
+                END
+            ) AS client,
+            warehouse,
+            query_type,
+            query_id,
+            database
+        FROM classified
+        WHERE rn = 1 OR display_name IS NULL
     )
     SELECT 
         organization_name,
@@ -162,20 +219,20 @@ BEGIN
         warehouse,
         database, 
         CASE
-            WHEN r.query_type LIKE 'CREATE%' 
-                 OR r.query_type LIKE 'ALTER%' 
-                 OR r.query_type LIKE 'DROP%' 
-                 OR r.query_type LIKE 'TRUNCATE%' 
-                 OR r.query_type LIKE 'RENAME%' 
-                 OR r.query_type LIKE 'UNDROP%'
-                 OR r.query_type = 'COMMENT' 
+            WHEN query_type LIKE 'CREATE%' 
+                 OR query_type LIKE 'ALTER%' 
+                 OR query_type LIKE 'DROP%' 
+                 OR query_type LIKE 'TRUNCATE%' 
+                 OR query_type LIKE 'RENAME%' 
+                 OR query_type LIKE 'UNDROP%'
+                 OR query_type = 'COMMENT' 
             THEN 'DDL'
-            WHEN r.query_type LIKE 'SHOW%' OR r.query_type LIKE 'DESCRIBE%' OR r.query_type IN ('DESC', 'LIST_FILES', 'EXPLAIN') THEN 'metadata'
-            WHEN r.query_type IN ('SELECT', 'UNLOAD', 'GET_FILES') THEN 'read'
+            WHEN query_type LIKE 'SHOW%' OR query_type LIKE 'DESCRIBE%' OR query_type IN ('DESC', 'LIST_FILES', 'EXPLAIN') THEN 'metadata'
+            WHEN query_type IN ('SELECT', 'UNLOAD', 'GET_FILES') THEN 'read'
             ELSE 'write'
         END AS direction, 
-        count(distinct query_id) as access_count
-    FROM raw_access r
+        COUNT(DISTINCT query_id) AS access_count
+    FROM raw_access
     GROUP BY ALL;
     
     RETURN 'Data lake access data refreshed successfully';
