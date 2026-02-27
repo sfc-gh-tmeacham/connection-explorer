@@ -10,3 +10,9 @@ streamlit:
     - static/snowflake-database.png
     - static/snowflake-warehouse.png
     - environment.yml
+    - components/__init__.py
+    - components/theme.py
+    - components/assets.py
+    - components/data.py
+    - components/network.py
+    - components/charts.py
