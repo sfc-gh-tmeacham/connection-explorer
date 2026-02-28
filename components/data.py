@@ -1,4 +1,10 @@
-"""Data loading, processing, and filtering."""
+"""Data loading, processing, and filtering.
+
+Provides the full data pipeline for the app: loading from Snowflake (or
+generating sample data for local development), cleaning/aggregating rows,
+and applying sidebar filter selections.  All expensive operations are
+wrapped with ``st.cache_data`` for performance.
+"""
 
 from typing import Sequence
 
@@ -10,7 +16,17 @@ from components.setup import ensure_tables_exist
 
 @st.cache_data(show_spinner=False, ttl=3600)
 def get_current_account(session) -> str:
-    """Get current Snowflake account name (cached for 1 hour)."""
+    """Return the current Snowflake account name.
+
+    Cached for 1 hour.  Falls back to ``"SAMPLE_ACCOUNT"`` when no active
+    Snowflake session is available (e.g. local development).
+
+    Args:
+        session: A Snowpark ``Session`` object, or ``None``.
+
+    Returns:
+        The account name string.
+    """
     if session is not None:
         try:
             return session.sql("SELECT CURRENT_ACCOUNT()").collect()[0][0]
@@ -20,17 +36,27 @@ def get_current_account(session) -> str:
 
 
 def sample_dataframe(session) -> pd.DataFrame:
-    """Generate sample data for demo/local development.
+    """Generate sample data for demo and local development.
 
     Models a realistic medallion architecture with multiple domain databases
     per layer, purpose-built warehouses, and realistic tool connections.
 
-    Bronze (raw):  RAW_EVENTS_DB, RAW_ERP_DB, RAW_CRM_DB, RAW_CLICKSTREAM_DB
-    Silver (clean): CLEANED_EVENTS_DB, CLEANED_ERP_DB, CLEANED_CRM_DB,
-                    CLEANED_CLICKSTREAM_DB, INTEGRATED_DB
-    Gold (marts):  FINANCE_MART_DB, MARKETING_MART_DB, PRODUCT_MART_DB,
-                   EXECUTIVE_MART_DB
-    Other:         ML_FEATURES_DB, GOVERNANCE_DB, REVERSE_ETL_DB, SANDBOX_DB
+    Layers:
+        - Bronze (raw): RAW_EVENTS_DB, RAW_ERP_DB, RAW_CRM_DB,
+          RAW_CLICKSTREAM_DB
+        - Silver (clean): CLEANED_EVENTS_DB, CLEANED_ERP_DB, CLEANED_CRM_DB,
+          CLEANED_CLICKSTREAM_DB, INTEGRATED_DB
+        - Gold (marts): FINANCE_MART_DB, MARKETING_MART_DB, PRODUCT_MART_DB,
+          EXECUTIVE_MART_DB
+        - Other: ML_FEATURES_DB, GOVERNANCE_DB, REVERSE_ETL_DB, SANDBOX_DB
+
+    Args:
+        session: A Snowpark ``Session`` (used only to resolve the current
+            account name) or ``None``.
+
+    Returns:
+        A DataFrame with columns ORGANIZATION_NAME, ACCOUNT_NAME, DATABASE,
+        WAREHOUSE, CLIENT, DIRECTION, and ACCESS_COUNT.
     """
     current_account = get_current_account(session)
     org = "SAMPLE_ORG"
@@ -251,7 +277,18 @@ def sample_dataframe(session) -> pd.DataFrame:
 
 @st.cache_data(show_spinner=False, ttl=300)
 def load_data(session) -> pd.DataFrame:
-    """Load data from Snowflake account usage or return sample data."""
+    """Load access data from Snowflake or fall back to sample data.
+
+    Attempts to query the ``data_lake_access_30d`` table via the provided
+    Snowpark session.  On failure (no session, empty result, or SQL error)
+    returns ``sample_dataframe()`` instead.  Cached for 5 minutes.
+
+    Args:
+        session: A Snowpark ``Session`` object, or ``None`` for local dev.
+
+    Returns:
+        A DataFrame with the standard 7-column schema.
+    """
     if session is None:
         return sample_dataframe(session)
     try:
@@ -274,7 +311,19 @@ def load_data(session) -> pd.DataFrame:
 
 @st.cache_data(show_spinner=False)
 def process_dataframe(df: pd.DataFrame) -> pd.DataFrame:
-    """Clean and aggregate dataframe."""
+    """Clean and aggregate the raw access DataFrame.
+
+    Drops rows with any null values, filters out rows with
+    ``ACCESS_COUNT <= 20``, and groups by the core dimensions to produce
+    a single summed ACCESS_COUNT per unique combination.
+
+    Args:
+        df: Raw DataFrame from ``load_data``.
+
+    Returns:
+        A cleaned, aggregated DataFrame sorted by ACCESS_COUNT descending.
+        Returns the input unchanged if it is empty.
+    """
     if df.empty:
         return df
     df = df.dropna(how="any", axis=0)
@@ -300,7 +349,24 @@ def apply_filters(
     direction_filters: Sequence[str],
     access_count: int,
 ) -> pd.DataFrame:
-    """Apply filters to dataframe with caching."""
+    """Apply sidebar filter selections to the processed DataFrame.
+
+    All filter parameters are optional in the sense that empty sequences
+    or empty strings mean "no filter on this dimension".  Results are
+    cached by Streamlit so identical filter combos are instant.
+
+    Args:
+        df: The processed DataFrame to filter.
+        database_names: Database names to include (empty = all).
+        warehouse_names: Warehouse names to include (empty = all).
+        client_names: Client names to include (empty = all).
+        org_filter: Substring match on ORGANIZATION_NAME (empty = all).
+        direction_filters: Direction values to include (empty = all).
+        access_count: Minimum ACCESS_COUNT threshold (exclusive).
+
+    Returns:
+        A filtered copy of *df*.  Returns the input unchanged if empty.
+    """
     if df.empty:
         return df
 
@@ -322,7 +388,18 @@ def apply_filters(
 
 @st.cache_data(show_spinner=False)
 def get_distinct_values(df: pd.DataFrame, column: str) -> list:
-    """Get distinct values for filter dropdowns."""
+    """Return sorted unique values from a DataFrame column.
+
+    Used to populate sidebar multiselect filter options.
+
+    Args:
+        df: The source DataFrame.
+        column: Column name to extract distinct values from.
+
+    Returns:
+        A sorted list of unique string values, or an empty list if *df*
+        is empty.
+    """
     if df.empty:
         return []
     return sorted(df[column].astype(str).unique().tolist())

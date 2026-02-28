@@ -1,4 +1,9 @@
-"""Snowflake brand theming: colors, CSS, and theme detection."""
+"""Snowflake brand theming: colors, CSS, and theme detection.
+
+Provides brand color constants, a global ``CUSTOM_CSS`` block for Streamlit
+injection, and helpers that detect whether the active Streamlit theme is
+dark or light so other modules can adapt dynamically.
+"""
 
 from typing import Optional, Tuple
 
@@ -216,7 +221,15 @@ CUSTOM_CSS = """
 
 
 def _hex_to_rgb(hex_color: str) -> Optional[RGB]:
-    """Convert hex color string to RGB tuple."""
+    """Convert a hex color string to an RGB tuple.
+
+    Args:
+        hex_color: A CSS hex color string (e.g. ``"#29B5E8"`` or ``"29B5E8"``).
+
+    Returns:
+        A 3-tuple of ints ``(R, G, B)`` in 0-255 range, or ``None`` if the
+        input is not a valid 6-digit hex color.
+    """
     hex_color = (hex_color or "").strip().lstrip("#")
     if len(hex_color) != 6:
         return None
@@ -227,17 +240,35 @@ def _hex_to_rgb(hex_color: str) -> Optional[RGB]:
 
 
 def _relative_luminance(rgb: RGB) -> float:
-    """Calculate relative luminance (0-1) from RGB tuple."""
+    """Calculate perceived relative luminance from an RGB tuple.
+
+    Uses the ITU-R BT.601 luma coefficients (0.299 R + 0.587 G + 0.114 B).
+
+    Args:
+        rgb: A 3-tuple of ints ``(R, G, B)`` in 0-255 range.
+
+    Returns:
+        A float in the range 0.0 (black) to 1.0 (white).
+    """
     return (0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]) / 255
 
 
 def _is_dark_detected() -> bool:
     """Detect whether the active Streamlit theme is dark.
 
+    Tries multiple heuristics in order:
+
+    1. ``st.get_option("theme.base")`` — explicit ``"dark"`` / ``"light"``.
+    2. Background color luminance — dark background implies dark theme.
+    3. Text color luminance — bright text implies dark background.
+
     Streamlit's theme is client-side, so ``st.get_option("theme.base")``
-    returns ``None`` when the user hasn't set an explicit theme (i.e. the
+    returns ``None`` when the user has not set an explicit theme (i.e. the
     system/browser default is in effect).  Streamlit's own default is dark,
-    so we default to ``True`` when detection is inconclusive.
+    so we return ``True`` when detection is inconclusive.
+
+    Returns:
+        ``True`` if the theme appears to be dark, ``False`` otherwise.
     """
     try:
         base = st.get_option("theme.base")
@@ -263,16 +294,27 @@ def _is_dark_detected() -> bool:
 
 
 def is_dark_theme() -> bool:
-    """Return True if the current Streamlit theme appears to be dark."""
+    """Return whether the current Streamlit theme appears to be dark.
+
+    Thin wrapper around ``_is_dark_detected`` exposed as the public API.
+
+    Returns:
+        ``True`` if dark, ``False`` if light.
+    """
     return _is_dark_detected()
 
 
 def get_theme_colors() -> Tuple[bool, str]:
-    """Return (is_dark, text_color) tuple for current Streamlit theme.
+    """Return theme detection results for modules that need an explicit text color.
 
-    Used by the network module which needs an explicit text color for PyVis.
+    Used by the network module which needs an explicit text color for vis.js.
     Plotly charts should use ``is_dark_theme()`` instead and let Streamlit's
     built-in Plotly theme integration handle text colors automatically.
+
+    Returns:
+        A tuple of ``(is_dark, text_color)`` where *is_dark* is a bool and
+        *text_color* is a CSS hex color string suitable for overlaying on
+        the detected background.
     """
     is_dark = _is_dark_detected()
 

@@ -1,4 +1,9 @@
-"""Plotly bar charts and Sankey diagrams."""
+"""Plotly bar charts and Sankey diagrams.
+
+Renders interactive visualizations below the network graph: horizontal
+bar charts for top databases, warehouses, and clients by access count,
+plus read/write Sankey flow diagrams.
+"""
 
 import pandas as pd
 import plotly.graph_objects as go
@@ -9,7 +14,17 @@ from components.theme import SNOWFLAKE_BLUE, STAR_BLUE, AMBER, is_dark_theme
 
 @st.cache_data(show_spinner=False)
 def prepare_chart_data(df: pd.DataFrame, column: str, top_n: int = 10) -> pd.DataFrame:
-    """Prepare aggregated data for charts."""
+    """Aggregate access counts by a single dimension and return the top N.
+
+    Args:
+        df: The filtered access DataFrame.
+        column: Column name to group by (e.g. ``"CLIENT"``).
+        top_n: Maximum number of rows to return.
+
+    Returns:
+        A DataFrame with columns ``[column.title(), "Access Count"]`` sorted
+        descending by Access Count, or an empty DataFrame if *df* is empty.
+    """
     if df.empty:
         return pd.DataFrame()
 
@@ -36,6 +51,16 @@ def _build_bar_chart(
     Text colors are intentionally omitted so that Streamlit's built-in Plotly
     theme integration (``theme="streamlit"``, the default) can inject the
     correct light/dark text color at render time.
+
+    Args:
+        data: Aggregated DataFrame from ``prepare_chart_data``.
+        column: The dimension column name (e.g. ``"CLIENT"``).
+        bar_color: CSS hex color for the bars.
+        grid_color: CSS rgba color for the axis grid lines.
+        height: Chart height in pixels.
+
+    Returns:
+        A ``plotly.graph_objects.Figure``, or ``None`` if *data* is empty.
     """
     if data.empty:
         return None
@@ -81,7 +106,21 @@ def _build_bar_chart(
 
 
 def _build_sankey(df: pd.DataFrame, direction: str) -> go.Figure | None:
-    """Build a Sankey figure for a single direction (read or write)."""
+    """Build a Sankey flow diagram for a single data-flow direction.
+
+    For writes, flows run client (left) to database (right).  For reads,
+    flows run database (left) to client (right).  Nodes on each side are
+    sorted by total volume descending.
+
+    Args:
+        df: The filtered access DataFrame (all directions included; this
+            function filters internally).
+        direction: ``"read"`` or ``"write"``.
+
+    Returns:
+        A ``plotly.graph_objects.Figure``, or ``None`` if no rows match
+        the requested direction.
+    """
     subset = df[df["DIRECTION"] == direction]
     if subset.empty:
         return None
@@ -160,7 +199,11 @@ def _build_sankey(df: pd.DataFrame, direction: str) -> go.Figure | None:
 
 
 def render_sankey(df: pd.DataFrame) -> None:
-    """Render side-by-side Sankey diagrams for reads and writes."""
+    """Render side-by-side Sankey diagrams for read and write flows.
+
+    Args:
+        df: The filtered access DataFrame.  No-ops if empty.
+    """
     if df.empty:
         return
 
@@ -177,6 +220,15 @@ def render_sankey(df: pd.DataFrame) -> None:
 
 
 def render_bar_charts(df: pd.DataFrame) -> None:
+    """Render bar charts for top clients, databases, and warehouses.
+
+    Displays two side-by-side charts (Client, Database) followed by a
+    full-width Warehouse chart, then the Sankey diagrams.  Adapts bar
+    and grid colors to the current Streamlit theme.
+
+    Args:
+        df: The filtered access DataFrame.  Shows a warning if empty.
+    """
     if df.empty:
         st.warning("Apply different filters or load more data to see charts.")
         return

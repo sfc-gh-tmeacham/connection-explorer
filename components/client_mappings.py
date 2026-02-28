@@ -306,10 +306,16 @@ _VIEWBOX_RE = re.compile(r'viewBox="([^"]+)"')
 
 @lru_cache(maxsize=64)
 def _load_svg_paths(filename: str) -> tuple[list[str], float] | None:
-    """Read an SVG file and extract all path data strings plus the viewBox size.
+    """Read an SVG file and extract all ``<path>`` data strings and viewBox size.
 
-    Returns (paths, viewbox_size) where viewbox_size is the max of width/height
-    from the viewBox attribute, or None if the file can't be read.
+    Args:
+        filename: SVG filename relative to ``ICONS_DIR``.
+
+    Returns:
+        A tuple ``(paths, viewbox_size)`` where *paths* is a list of SVG path
+        ``d`` attribute strings and *viewbox_size* is the max of width/height
+        from the ``viewBox`` attribute.  Returns ``None`` if the file does not
+        exist or contains no paths.
     """
     svg_path = ICONS_DIR / filename
     if not svg_path.exists():
@@ -329,7 +335,18 @@ def _load_svg_paths(filename: str) -> tuple[list[str], float] | None:
 
 
 def _abbreviation(name: str) -> str:
-    """Return a 1-2 letter abbreviation for a client display name."""
+    """Return a 1-2 letter abbreviation for a client display name.
+
+    Looks up ``CLIENT_ICON_ABBREVS`` first; if not found, auto-generates
+    an abbreviation from the first letter plus the next uppercase letter
+    or digit.
+
+    Args:
+        name: The client display name (e.g. ``"Power BI"``).
+
+    Returns:
+        A 1-2 character uppercase string (e.g. ``"PB"``).
+    """
     if name in CLIENT_ICON_ABBREVS:
         return CLIENT_ICON_ABBREVS[name]
     # Auto-generate: first letter + first consonant/uppercase after it
@@ -347,7 +364,16 @@ def _abbreviation(name: str) -> str:
 
 
 def _name_to_hue(name: str) -> int:
-    """Deterministic hue (0-360) from a client name."""
+    """Derive a deterministic hue value from a client name.
+
+    Uses an MD5 hash so the same name always maps to the same color.
+
+    Args:
+        name: The client display name.
+
+    Returns:
+        An integer in the range 0-359 representing an HSL hue.
+    """
     h = int(hashlib.md5(name.encode()).hexdigest()[:8], 16)
     return h % 360
 
@@ -356,9 +382,17 @@ def _name_to_hue(name: str) -> int:
 def generate_client_icon_uri(name: str) -> str:
     """Generate a base64 SVG data URI icon for a client application.
 
-    Uses a real brand SVG icon when available (loaded from static/client-icons/),
-    falling back to a colored circle with a 1-2 letter abbreviation.
-    Colors are deterministic per client name.
+    Uses a real brand SVG icon when available (loaded from
+    ``static/client-icons/``), falling back to a colored circle with a
+    1-2 letter abbreviation.  Background colors are deterministic per
+    client name via ``_name_to_hue``.
+
+    Args:
+        name: The client display name (e.g. ``"Tableau"``).
+
+    Returns:
+        A ``data:image/svg+xml;base64,...`` URI string suitable for use
+        as a vis.js image node.
     """
     hue = _name_to_hue(name)
     bg_color = f"hsl({hue}, 55%, 50%)"

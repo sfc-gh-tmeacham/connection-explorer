@@ -1,4 +1,11 @@
-"""Network graph component using Streamlit Components v2 + vis-network.js."""
+"""Network graph component using Streamlit Components v2 and vis-network.js.
+
+Builds an interactive force-directed graph where clients, warehouses, and
+databases are nodes and access events are weighted, directed edges.  Uses
+vis.js ``DataSet`` operations for click-to-isolate / restore and physics-based
+layout.  Custom tooltips are driven by vis.js hover events because the
+built-in tooltip mechanism is unavailable inside Components v2.
+"""
 
 import json
 import math
@@ -20,7 +27,19 @@ from components.theme import AMBER, READ_GREEN, SNOWFLAKE_BLUE
 # ---------------------------------------------------------------------------
 
 def _aggregate_edges(df: pd.DataFrame) -> pd.DataFrame:
-    """Aggregate duplicate edges by summing ACCESS_COUNT."""
+    """Aggregate duplicate edges by summing ACCESS_COUNT.
+
+    Groups rows by (CLIENT, WAREHOUSE, DATABASE, DIRECTION) and sums their
+    access counts so each unique route appears only once.
+
+    Args:
+        df: Raw access DataFrame with at least CLIENT, WAREHOUSE, DATABASE,
+            DIRECTION, ACCESS_COUNT, ORGANIZATION_NAME, and ACCOUNT_NAME
+            columns.
+
+    Returns:
+        Aggregated DataFrame sorted by ACCESS_COUNT descending.
+    """
     group_cols = ["CLIENT", "WAREHOUSE", "DATABASE", "DIRECTION"]
     agg = (
         df.groupby(group_cols, as_index=False)
@@ -32,7 +51,21 @@ def _aggregate_edges(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _compute_node_stats(df: pd.DataFrame) -> Dict[str, dict]:
-    """Compute per-node stats: total access, read/write breakdown, top connections."""
+    """Compute per-node stats: total access, read/write breakdown, top connections.
+
+    Iterates over every row and accumulates totals for each database,
+    warehouse, and client node.  Also tracks which other nodes each node
+    is connected to (and by how much) so tooltips can show "Top
+    Connections".
+
+    Args:
+        df: Aggregated access DataFrame (output of ``_aggregate_edges``).
+
+    Returns:
+        Dict mapping node name to a stats dict with keys ``total``,
+        ``read``, ``write``, and ``connections`` (a dict of neighbor
+        name to cumulative access count).
+    """
     stats: Dict[str, dict] = defaultdict(lambda: {
         "total": 0, "read": 0, "write": 0, "connections": defaultdict(int),
     })
@@ -57,7 +90,20 @@ def _compute_node_stats(df: pd.DataFrame) -> Dict[str, dict]:
 
 def _log_scale(value: float, min_val: float, max_val: float,
                out_min: float, out_max: float) -> float:
-    """Map value to out_min..out_max on a log scale."""
+    """Map *value* from ``[min_val, max_val]`` to ``[out_min, out_max]`` on a log scale.
+
+    Uses ``math.log1p`` so that zero values map cleanly to *out_min*.
+
+    Args:
+        value: The input value to transform.
+        min_val: Lower bound of the input range.
+        max_val: Upper bound of the input range.
+        out_min: Lower bound of the output range.
+        out_max: Upper bound of the output range.
+
+    Returns:
+        The log-scaled output value clamped to ``[out_min, out_max]``.
+    """
     if max_val <= min_val or value <= 0:
         return out_min
     log_min = math.log1p(min_val)
@@ -69,7 +115,24 @@ def _log_scale(value: float, min_val: float, max_val: float,
 
 def _build_tooltip(node_name: str, node_type: str, stats: dict,
                    org_name: str, account: str) -> str:
-    """Build rich text tooltip for a node."""
+    """Build a rich plain-text tooltip string for a graph node.
+
+    The tooltip includes organization / account context, total and
+    read/write access counts, and the top three connected nodes by
+    traffic volume.
+
+    Args:
+        node_name: Display name of the node (e.g. ``"ANALYTICS_DB"``).
+        node_type: Human-readable category — ``"Database"``,
+            ``"Warehouse"``, or ``"Client"``.
+        stats: Per-node stats dict as returned by ``_compute_node_stats``.
+        org_name: Snowflake organization name for context.
+        account: Snowflake account name for context.
+
+    Returns:
+        Multi-line tooltip string suitable for display in a custom
+        tooltip ``<div>``.
+    """
     total = stats.get("total", 0)
     reads = stats.get("read", 0)
     writes = stats.get("write", 0)
@@ -106,7 +169,19 @@ _CLUSTER_RULES = [
 
 
 def _assign_cluster(db_name: str) -> str:
-    """Return cluster label for a database, or empty string if unclustered."""
+    """Return the cluster label for a database, or empty string if unclustered.
+
+    Matches *db_name* against ``_CLUSTER_RULES`` in order and returns the
+    label of the first matching rule.  Databases that match no rule are
+    left unclustered.
+
+    Args:
+        db_name: The database name to classify.
+
+    Returns:
+        Cluster label string (e.g. ``"Raw Layer"``) or ``""`` if no rule
+        matches.
+    """
     for label, predicate in _CLUSTER_RULES:
         if predicate(db_name):
             return label
@@ -119,7 +194,14 @@ def _assign_cluster(db_name: str) -> str:
 
 @lru_cache(maxsize=1)
 def _load_vis_js() -> str:
-    """Read vis-network.min.js from the installed pyvis package."""
+    """Read the vis-network.min.js source from the installed pyvis package.
+
+    The result is cached so the file is read at most once per process
+    lifetime.
+
+    Returns:
+        The full contents of ``vis-network.min.js`` as a string.
+    """
     import pyvis
     vis_path = os.path.join(
         os.path.dirname(pyvis.__file__),
@@ -283,7 +365,18 @@ _COMPONENT_HTML = f"""
 # ---------------------------------------------------------------------------
 
 def _build_js() -> str:
-    """Build the complete JS module string: vis.js UMD + our component code."""
+    """Build the complete JavaScript module for the vis.js network component.
+
+    Concatenates the vis-network UMD bundle with custom component code
+    that handles network creation, click-to-isolate / restore, custom
+    tooltips, and database clustering.  The vis.js source is injected as
+    a JSON string literal so it can be evaluated at runtime via the
+    ``Function`` constructor.
+
+    Returns:
+        A single JavaScript module string ready to be passed to
+        ``st.components.v2.component(js=...)``.
+    """
     vis_js_code = _load_vis_js()
 
     # We load vis.js by evaluating it in a way that sets window.vis.
@@ -594,7 +687,16 @@ export default function(component) {
 
 @st.cache_resource(show_spinner=False)
 def _get_component():
-    """Register the v2 component once and return the mount callable."""
+    """Register the Streamlit Components v2 component and return its mount callable.
+
+    The component is registered once per Streamlit server process via
+    ``@st.cache_resource``.  Subsequent calls return the cached mount
+    function.
+
+    Returns:
+        A callable that mounts the vis.js network component into the
+        Streamlit page and returns a ``BidiComponentResult``.
+    """
     return st.components.v2.component(
         "data_lake_network",
         html=_COMPONENT_HTML,
@@ -611,9 +713,30 @@ def _get_component():
 def render_network(df: pd.DataFrame, _node_images: Dict[str, str],
                    session, fullscreen: bool = False,
                    hide_warehouses: bool = False):
-    """Build and render the network graph as a v2 component.
+    """Build and render the interactive network graph as a v2 component.
 
-    Returns the BidiComponentResult with .selected_node available.
+    Aggregates the access DataFrame, computes per-node statistics, then
+    constructs JSON-serializable node / edge / path lists that are passed
+    to the vis.js front-end.  Each edge carries a ``pathIndex`` that links
+    it to its exact ``[client, warehouse, database]`` path triple so the
+    JS click-to-isolate handler can filter edges unambiguously.
+
+    Args:
+        df: Filtered access DataFrame.  If empty, an info message is
+            shown and ``None`` is returned.
+        _node_images: Dict mapping node type (``"database"``,
+            ``"warehouse"``) to base-64 data-URI strings used as vis.js
+            node images.
+        session: Active Snowflake session (or ``None`` in sample-data
+            mode) used to resolve the current account name.
+        fullscreen: If ``True``, the graph container expands to fill the
+            viewport height.
+        hide_warehouses: If ``True``, warehouse nodes are omitted and
+            edges connect clients directly to databases.
+
+    Returns:
+        The ``BidiComponentResult`` from the mounted component (with a
+        ``selected_node`` trigger value), or ``None`` if *df* is empty.
     """
     if df.empty:
         st.info("No rows available to render.")

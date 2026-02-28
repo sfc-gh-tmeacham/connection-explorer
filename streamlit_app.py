@@ -1,3 +1,10 @@
+"""Data Lake Explorer — main Streamlit application entry point.
+
+Loads Snowflake access data, presents sidebar filters, and renders an
+interactive vis.js network graph with accompanying Plotly bar charts and
+Sankey diagrams.  Supports a fullscreen mode for the network graph.
+"""
+
 import streamlit as st
 
 from components.assets import FAVICON_PATH, load_node_images, render_snowflake_header
@@ -26,7 +33,20 @@ st.set_page_config(
 
 
 def sidebar_filters(df):
-    """Render sidebar filters and return filtered dataframe."""
+    """Render sidebar filter widgets and return the filtered DataFrame.
+
+    Creates multiselect widgets for database, warehouse, client, and
+    direction, plus a numeric access-count threshold and a row-limit
+    selector.  Widget values are persisted in ``st.session_state`` so
+    they survive Streamlit reruns.
+
+    Args:
+        df: The fully processed DataFrame to filter.  If empty the
+            function returns it unchanged.
+
+    Returns:
+        A filtered (and possibly row-limited) copy of *df*.
+    """
     st.sidebar.header("Filters")
     if df.empty:
         return df
@@ -77,7 +97,18 @@ def sidebar_filters(df):
 
 
 def render_network_section(df, node_images, session_obj):
-    """Render network visualization with charts below."""
+    """Render the network graph section with a title bar and charts below.
+
+    Displays the section title, a "Hide Warehouses" toggle, and a
+    fullscreen button in a three-column layout, then mounts the vis.js
+    network component followed by the Plotly bar charts and Sankey
+    diagrams.
+
+    Args:
+        df: Filtered access DataFrame to visualize.
+        node_images: Dict of base-64 data-URI images keyed by node type.
+        session_obj: Active Snowflake session (or ``None``).
+    """
     title_col, toggle_col, btn_col = st.columns([7, 1.5, 0.5])
     with title_col:
         st.markdown(
@@ -97,6 +128,12 @@ def render_network_section(df, node_images, session_obj):
 
 
 def main():
+    """Application entry point — orchestrates data loading, filtering, and rendering.
+
+    Initializes session-state defaults, checks for fullscreen mode, and
+    then either renders the fullscreen network view or the normal layout
+    (header, sidebar filters, network graph, and charts).
+    """
     filter_defaults = {
         "persist_filter_database": [],
         "persist_filter_warehouse": [],

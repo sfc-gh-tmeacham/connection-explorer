@@ -1,4 +1,8 @@
-"""Static asset loading and header rendering."""
+"""Static asset loading and header rendering.
+
+Handles base64-encoding of image files (logo, node icons) and renders
+the branded header block at the top of the Streamlit app.
+"""
 
 import base64
 from pathlib import Path
@@ -15,7 +19,14 @@ FAVICON_PATH = STATIC_DIR / "snowflake-bug-logo.png"
 
 @st.cache_resource(show_spinner=False)
 def load_snowflake_logo() -> str:
-    """Load Snowflake bug logo as base64 encoded string."""
+    """Load the Snowflake bug logo as a base64-encoded string.
+
+    Cached via ``st.cache_resource`` so the file is read only once per
+    Streamlit server lifetime.
+
+    Returns:
+        A UTF-8 base64 string of the PNG image data.
+    """
     with open(STATIC_DIR / "snowflake-bug-logo.png", "rb") as f:
         encoded = base64.b64encode(f.read()).decode("utf-8")
     return encoded
@@ -23,7 +34,23 @@ def load_snowflake_logo() -> str:
 
 @st.cache_resource(show_spinner=False)
 def load_node_images() -> Dict[str, str]:
+    """Load database and warehouse node images as base64 data URIs.
+
+    Returns:
+        A dict mapping node type names (``"database"``, ``"warehouse"``) to
+        ``data:image/png;base64,...`` URI strings suitable for vis.js image
+        nodes.
+    """
+
     def encode_image(file_name: str) -> str:
+        """Encode a single PNG file from the static directory.
+
+        Args:
+            file_name: Filename relative to ``STATIC_DIR``.
+
+        Returns:
+            A ``data:image/png;base64,...`` URI string.
+        """
         with open(STATIC_DIR / file_name, "rb") as image_file:
             encoded = base64.b64encode(image_file.read()).decode("utf-8")
         return f"data:image/png;base64,{encoded}"
@@ -35,7 +62,12 @@ def load_node_images() -> Dict[str, str]:
 
 
 def render_snowflake_header() -> None:
-    """Render header with Data Lake Explorer as main title and Horizon Catalog as subheader."""
+    """Render the app header with the Data Lake Explorer title and Horizon Catalog badge.
+
+    Injects an ``unsafe_allow_html`` markdown block containing the Snowflake
+    bug logo, the app title, and the Horizon Catalog sub-header styled with
+    Snowflake brand colors.
+    """
     logo_b64 = load_snowflake_logo()
 
     st.markdown(

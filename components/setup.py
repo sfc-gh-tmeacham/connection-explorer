@@ -1,4 +1,10 @@
-"""Auto-setup: create and seed Snowflake objects on first run."""
+"""Auto-setup: create and seed Snowflake objects on first run.
+
+Creates the ``SNOWFLAKE_DATA_LAKE.DATA_LAKE_ACCESS`` schema, the
+``data_lake_access_30d`` access table, and the ``client_app_classification``
+lookup table if they do not already exist.  The classification table is
+seeded via MERGE from ``CLIENT_MAPPINGS`` so re-runs are idempotent.
+"""
 
 import streamlit as st
 
@@ -13,9 +19,15 @@ FQ_CLASSIFICATION_TABLE = f"{FQ_SCHEMA}.client_app_classification"
 
 @st.cache_data(show_spinner=False, ttl=3600)
 def ensure_tables_exist(session) -> None:
-    """Create tables if they don't exist and seed the classification lookup.
+    """Create required Snowflake objects and seed the classification lookup.
 
-    Idempotent — safe to call on every app load.  Runs once per hour (TTL).
+    Idempotent -- safe to call on every app load.  Runs once per hour via
+    ``st.cache_data`` TTL.  If the session lacks required privileges, a
+    warning is shown and execution continues gracefully.
+
+    Args:
+        session: A Snowpark ``Session`` object, or ``None`` (in which case
+            the function returns immediately).
     """
     if session is None:
         return
