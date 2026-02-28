@@ -12,7 +12,7 @@ import streamlit as st
 
 from components.client_mappings import generate_client_icon_uri
 from components.data import get_current_account
-from components.theme import AMBER, SNOWFLAKE_BLUE
+from components.theme import AMBER, READ_GREEN, SNOWFLAKE_BLUE
 
 
 # ---------------------------------------------------------------------------
@@ -168,7 +168,7 @@ div.vis-tooltip {{
 
 #graph-legend {{
     position: absolute;
-    bottom: 16px;
+    top: 16px;
     left: 16px;
     background-color: var(--st-background-color, #0e1117);
     color: var(--st-text-color, #fafafa);
@@ -227,6 +227,24 @@ div.vis-tooltip {{
     opacity: 1;
     background: rgba(128,128,128,0.15);
 }}
+
+#custom-tooltip {{
+    display: none;
+    position: absolute;
+    z-index: 200;
+    pointer-events: none;
+    font-family: 'Lato', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 12px;
+    background-color: var(--st-background-color, #0e1117);
+    color: var(--st-text-color, #fafafa);
+    border: 1px solid rgba(128,128,128,0.3);
+    border-radius: 4px;
+    padding: 8px 10px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    line-height: 1.5;
+    white-space: pre-line;
+    max-width: 320px;
+}}
 """
 
 
@@ -237,10 +255,11 @@ div.vis-tooltip {{
 _COMPONENT_HTML = f"""
 <div class="vis-network-container">
     <div id="vis-canvas"></div>
+    <div id="custom-tooltip"></div>
     <div id="graph-legend">
         <div class="legend-title">Edge Direction</div>
         <div class="legend-item">
-            <span class="legend-line" style="background-color: {SNOWFLAKE_BLUE};"></span>
+            <span class="legend-line" style="background-color: {READ_GREEN};"></span>
             <span>Read</span>
         </div>
         <div class="legend-item">
@@ -249,8 +268,8 @@ _COMPONENT_HTML = f"""
         </div>
         <div class="legend-section">
             <div class="legend-title">Interaction</div>
-            <div style="font-size:11px; opacity:0.7;">Click node to highlight</div>
-            <div style="font-size:11px; opacity:0.7;">Double-click to reset</div>
+            <div style="font-size:11px; opacity:0.7;">Click node to isolate</div>
+            <div style="font-size:11px; opacity:0.7;">Click canvas to restore</div>
         </div>
         <button class="legend-btn" id="resetClustersBtn" style="display:none;">Expand All</button>
         <button class="legend-btn" id="clusterBtn">Cluster Databases</button>
@@ -330,20 +349,36 @@ export default function(component) {
             minVelocity: 0.75,
         },
         interaction: {
-            tooltipDelay: 200,
+            tooltipDelay: 0,
             hover: true,
+            tooltip: false,
         },
     };
 
     const network = new vis.Network(container, { nodes, edges }, options);
     container._visNetwork = network;
 
-    // --- Disable physics after stabilization ---
+    // --- Disable physics after initial stabilization ---
     network.once('stabilizationIterationsDone', function() {
         network.setOptions({ physics: { enabled: false } });
     });
 
-    // --- Click-to-highlight ---
+    // --- Helper: re-enable physics briefly so nodes reorganize, then freeze ---
+    function restabilize() {
+        network.setOptions({ physics: { enabled: true } });
+        network.once('stabilizationIterationsDone', function() {
+            network.setOptions({ physics: { enabled: false } });
+            network.fit({ animation: { duration: 400, easingFunction: 'easeInOutQuad' } });
+        });
+        network.stabilize();
+    }
+
+    // --- Store original data for restore ---
+    const originalNodes = data.nodes.slice();
+    const originalEdges = data.edges.slice();
+    let isolated = false;
+
+    // --- Click: isolate subgraph or restore full network ---
     network.on('click', function(params) {
         if (params.nodes.length === 1) {
             const nodeId = params.nodes[0];
@@ -354,82 +389,115 @@ export default function(component) {
                 return;
             }
 
-            // Use path triples [client, warehouse, database] to highlight
+            // Use path triples [client, warehouse, database] to find
             // only the exact routes that involve the clicked node.
             const paths = data.paths || [];
-            const highlightNodes = [nodeId];
+            const keepNodes = [nodeId];
+            const keepPathIndices = [];  // indices of matching paths
 
             for (let p = 0; p < paths.length; p++) {
                 const client = paths[p][0];
                 const wh = paths[p][1];
                 const db = paths[p][2];
                 if (client === nodeId || wh === nodeId || db === nodeId) {
-                    if (highlightNodes.indexOf(client) === -1) highlightNodes.push(client);
-                    if (highlightNodes.indexOf(wh) === -1) highlightNodes.push(wh);
-                    if (highlightNodes.indexOf(db) === -1) highlightNodes.push(db);
+                    if (keepNodes.indexOf(client) === -1) keepNodes.push(client);
+                    if (keepNodes.indexOf(wh) === -1) keepNodes.push(wh);
+                    if (keepNodes.indexOf(db) === -1) keepNodes.push(db);
+                    keepPathIndices.push(p);
                 }
             }
 
-            // Collect edges where both endpoints are in highlightNodes
-            const allEdgeData = edges.get();
-            const connectedEdges = [];
-            for (let i = 0; i < allEdgeData.length; i++) {
-                const e = allEdgeData[i];
-                if (highlightNodes.indexOf(e.from) !== -1 &&
-                    highlightNodes.indexOf(e.to) !== -1) {
-                    connectedEdges.push(e.id);
+            // Find edges whose pathIndex matches a kept path
+            const keepEdgeIds = [];
+            for (let i = 0; i < originalEdges.length; i++) {
+                const e = originalEdges[i];
+                if (e.pathIndex !== undefined && keepPathIndices.indexOf(e.pathIndex) !== -1) {
+                    keepEdgeIds.push(e.id);
                 }
             }
 
-            const allNodes = network.body.data.nodes;
-            const allEdges = network.body.data.edges;
-            const nodeUpdates = [];
-            const edgeUpdates = [];
-
-            const nodeIds = allNodes.getIds();
-            for (let i = 0; i < nodeIds.length; i++) {
-                const nid = nodeIds[i];
-                nodeUpdates.push({
-                    id: nid,
-                    opacity: highlightNodes.indexOf(nid) === -1 ? 0.15 : 1.0,
-                });
+            // Remove nodes not in the subgraph
+            const removeNodeIds = [];
+            const currentNodeIds = nodes.getIds();
+            for (let i = 0; i < currentNodeIds.length; i++) {
+                if (keepNodes.indexOf(currentNodeIds[i]) === -1) {
+                    removeNodeIds.push(currentNodeIds[i]);
+                }
             }
+            if (removeNodeIds.length > 0) nodes.remove(removeNodeIds);
 
-            const edgeIds = allEdges.getIds();
-            for (let j = 0; j < edgeIds.length; j++) {
-                const eid = edgeIds[j];
-                edgeUpdates.push({
-                    id: eid,
-                    hidden: connectedEdges.indexOf(eid) === -1,
-                });
+            // Remove edges not in the subgraph
+            const removeEdgeIds = [];
+            const currentEdgeIds = edges.getIds();
+            for (let i = 0; i < currentEdgeIds.length; i++) {
+                if (keepEdgeIds.indexOf(currentEdgeIds[i]) === -1) {
+                    removeEdgeIds.push(currentEdgeIds[i]);
+                }
             }
+            if (removeEdgeIds.length > 0) edges.remove(removeEdgeIds);
 
-            allNodes.update(nodeUpdates);
-            allEdges.update(edgeUpdates);
+            isolated = true;
+
+            // Let physics re-layout the isolated subgraph
+            restabilize();
 
             // Send selected node back to Python
             setTriggerValue('selected_node', nodeId);
+
+        } else if (params.nodes.length === 0 && params.edges.length === 0 && isolated) {
+            // Clicked empty canvas — restore full network
+            nodes.clear();
+            nodes.add(originalNodes);
+            edges.clear();
+            edges.add(originalEdges);
+            isolated = false;
+
+            // Re-run physics so restored network spreads out and fits
+            restabilize();
         }
     });
 
-    // --- Double-click to reset ---
-    network.on('doubleClick', function() {
-        const allNodes = network.body.data.nodes;
-        const allEdges = network.body.data.edges;
+    // --- Custom tooltip (vis.js built-in doesn't work in v2 components) ---
+    const tooltip = parentElement.querySelector('#custom-tooltip');
+    const canvasEl = container.querySelector('canvas');
 
-        const nodeIds = allNodes.getIds();
-        const nodeUpdates = [];
-        for (let i = 0; i < nodeIds.length; i++) {
-            nodeUpdates.push({ id: nodeIds[i], opacity: 1.0 });
-        }
-        allNodes.update(nodeUpdates);
+    function showTooltip(text, event) {
+        if (!tooltip || !text) return;
+        tooltip.textContent = text;
+        tooltip.style.display = 'block';
+        // Position relative to the vis-network-container
+        const containerRect = parentElement.querySelector('.vis-network-container').getBoundingClientRect();
+        var x = event.event.clientX - containerRect.left + 12;
+        var y = event.event.clientY - containerRect.top + 12;
+        // Keep tooltip within container bounds
+        tooltip.style.left = x + 'px';
+        tooltip.style.top = y + 'px';
+    }
 
-        const edgeIds = allEdges.getIds();
-        const edgeUpdates = [];
-        for (let j = 0; j < edgeIds.length; j++) {
-            edgeUpdates.push({ id: edgeIds[j], hidden: false });
+    function hideTooltip() {
+        if (tooltip) tooltip.style.display = 'none';
+    }
+
+    network.on('hoverNode', function(params) {
+        var nodeData = nodes.get(params.node);
+        if (nodeData && nodeData.title) {
+            showTooltip(nodeData.title, params);
         }
-        allEdges.update(edgeUpdates);
+    });
+
+    network.on('blurNode', function() {
+        hideTooltip();
+    });
+
+    network.on('hoverEdge', function(params) {
+        var edgeData = edges.get(params.edge);
+        if (edgeData && edgeData.title) {
+            showTooltip(edgeData.title, params);
+        }
+    });
+
+    network.on('blurEdge', function() {
+        hideTooltip();
     });
 
     // --- Clustering ---
@@ -541,7 +609,8 @@ def _get_component():
 # ---------------------------------------------------------------------------
 
 def render_network(df: pd.DataFrame, _node_images: Dict[str, str],
-                   session, fullscreen: bool = False):
+                   session, fullscreen: bool = False,
+                   hide_warehouses: bool = False):
     """Build and render the network graph as a v2 component.
 
     Returns the BidiComponentResult with .selected_node available.
@@ -562,6 +631,7 @@ def render_network(df: pd.DataFrame, _node_images: Dict[str, str],
     # Build node and edge lists as JSON-serializable dicts
     nodes = []
     edges = []
+    paths = []
     added_nodes: set = set()
     cluster_members: Dict[str, list] = defaultdict(list)
 
@@ -598,7 +668,7 @@ def render_network(df: pd.DataFrame, _node_images: Dict[str, str],
             })
             added_nodes.add(database)
 
-        if warehouse not in added_nodes:
+        if not hide_warehouses and warehouse not in added_nodes:
             s = node_stats.get(warehouse, {})
             wh_size = _log_scale(s.get("total", 0), global_min, global_max, 120, 300)
             tooltip = _build_tooltip(warehouse, "Warehouse", s, org_name, current_account)
@@ -624,36 +694,57 @@ def render_network(df: pd.DataFrame, _node_images: Dict[str, str],
             added_nodes.add(client)
 
         # Add edges
-        edge_color = AMBER if direction in ("write", "DML", "DDL") else SNOWFLAKE_BLUE
-        edge_title = f"Access Count: {ac:,}"
+        edge_color = AMBER if direction in ("write", "DML", "DDL") else READ_GREEN
+        dir_label = direction.upper() if direction else "READ"
+        edge_title = f"{client} → {warehouse} → {database}\nDirection: {dir_label}\nAccess Count: {ac:,}"
+        path_idx = len(paths)
 
-        if direction in ("write", "DML", "DDL"):
+        if hide_warehouses:
+            paths.append([client, client, database])
+            edge_title_direct = f"{client} → {database}\nDirection: {dir_label}\nWarehouse: {warehouse}\nAccess Count: {ac:,}"
+            # Direct edge: client ↔ database (skip warehouse)
+            if direction in ("write", "DML", "DDL"):
+                edges.append({
+                    "id": f"e{len(edges)}", "from": client, "to": database,
+                    "value": ac, "color": edge_color, "arrows": "to",
+                    "arrowStrikethrough": False, "title": edge_title_direct,
+                    "pathIndex": path_idx,
+                })
+            else:
+                edges.append({
+                    "id": f"e{len(edges)}", "from": database, "to": client,
+                    "value": ac, "color": edge_color, "arrows": "to",
+                    "arrowStrikethrough": False, "title": edge_title_direct,
+                    "pathIndex": path_idx,
+                })
+        elif direction in ("write", "DML", "DDL"):
+            paths.append([client, warehouse, database])
             edges.append({
-                "from": client, "to": warehouse, "value": ac,
-                "color": edge_color, "arrows": "to",
+                "id": f"e{len(edges)}", "from": client, "to": warehouse,
+                "value": ac, "color": edge_color, "arrows": "to",
                 "arrowStrikethrough": False, "title": edge_title,
+                "pathIndex": path_idx,
             })
             edges.append({
-                "from": warehouse, "to": database, "value": ac,
-                "color": edge_color, "arrows": "to",
+                "id": f"e{len(edges)}", "from": warehouse, "to": database,
+                "value": ac, "color": edge_color, "arrows": "to",
                 "arrowStrikethrough": False, "title": edge_title,
+                "pathIndex": path_idx,
             })
         else:
+            paths.append([client, warehouse, database])
             edges.append({
-                "from": database, "to": warehouse, "value": ac,
-                "color": edge_color, "arrows": "to",
+                "id": f"e{len(edges)}", "from": database, "to": warehouse,
+                "value": ac, "color": edge_color, "arrows": "to",
                 "arrowStrikethrough": False, "title": edge_title,
+                "pathIndex": path_idx,
             })
             edges.append({
-                "from": warehouse, "to": client, "value": ac,
-                "color": edge_color, "arrows": "to",
+                "id": f"e{len(edges)}", "from": warehouse, "to": client,
+                "value": ac, "color": edge_color, "arrows": "to",
                 "arrowStrikethrough": False, "title": edge_title,
+                "pathIndex": path_idx,
             })
-
-    # Build path triples for precise click-to-highlight
-    paths = []
-    for _, row in agg_df.iterrows():
-        paths.append([row["CLIENT"], row["WAREHOUSE"], row["DATABASE"]])
 
     clusters = {label: members for label, members in cluster_members.items() if members}
 

@@ -78,19 +78,21 @@ def sidebar_filters(df):
 
 def render_network_section(df, node_images, session_obj):
     """Render network visualization with charts below."""
-    title_col, btn_col = st.columns([8, 1])
+    title_col, toggle_col, btn_col = st.columns([7, 1.5, 0.5])
     with title_col:
         st.markdown(
             '<div style="padding-left: 50px;"><span class="network-title">Network Graph</span></div>',
             unsafe_allow_html=True
         )
+    with toggle_col:
+        hide_wh = st.checkbox("Hide Warehouses", key="hide_warehouses")
     with btn_col:
         st.markdown('<div class="fullscreen-btn-container"></div>', unsafe_allow_html=True)
         if st.button("⛶", help="Full Screen"):
             st.session_state["full_screen_mode"] = True
             st.rerun()
 
-    render_network(df, node_images, session_obj, fullscreen=False)
+    render_network(df, node_images, session_obj, fullscreen=False, hide_warehouses=hide_wh)
     render_bar_charts(df)
 
 
@@ -208,7 +210,8 @@ def main():
             filtered_df = filtered_df.head(row_limit)
 
         node_images = load_node_images()
-        render_network(filtered_df, node_images, session, fullscreen=True)
+        hide_wh = st.session_state.get("hide_warehouses", False)
+        render_network(filtered_df, node_images, session, fullscreen=True, hide_warehouses=hide_wh)
         return
 
     # Normal mode
