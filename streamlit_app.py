@@ -3,7 +3,7 @@ import streamlit as st
 from components.assets import FAVICON_PATH, load_node_images, render_snowflake_header
 from components.charts import render_bar_charts
 from components.data import apply_filters, get_distinct_values, load_data, process_dataframe
-from components.network import build_network_html
+from components.network import render_network
 from components.theme import CUSTOM_CSS
 
 try:  # Streamlit in Snowflake automatically injects a Snowpark session
@@ -76,7 +76,7 @@ def sidebar_filters(df):
     return filtered_df.head(row_limit) if len(filtered_df) > row_limit else filtered_df
 
 
-def render_network_section(df, network_html):
+def render_network_section(df, node_images, session_obj):
     """Render network visualization with charts below."""
     title_col, btn_col = st.columns([8, 1])
     with title_col:
@@ -90,7 +90,7 @@ def render_network_section(df, network_html):
             st.session_state["full_screen_mode"] = True
             st.rerun()
 
-    st.components.v1.html(network_html, height=800)
+    render_network(df, node_images, session_obj, fullscreen=False)
     render_bar_charts(df)
 
 
@@ -208,8 +208,7 @@ def main():
             filtered_df = filtered_df.head(row_limit)
 
         node_images = load_node_images()
-        network_html = build_network_html(filtered_df, node_images, session, fullscreen=True)
-        st.components.v1.html(network_html, height=2000, scrolling=False)
+        render_network(filtered_df, node_images, session, fullscreen=True)
         return
 
     # Normal mode
@@ -228,9 +227,8 @@ def main():
     filtered_df = sidebar_filters(processed_df)
 
     node_images = load_node_images()
-    network_html = build_network_html(filtered_df, node_images, session, fullscreen=False)
 
-    render_network_section(filtered_df, network_html)
+    render_network_section(filtered_df, node_images, session)
     st.sidebar.markdown("Powered by Streamlit :streamlit:")
 
 if __name__ == "__main__":
