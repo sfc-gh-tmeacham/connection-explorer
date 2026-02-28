@@ -230,33 +230,61 @@ def _relative_luminance(rgb: RGB) -> float:
     return (0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]) / 255
 
 
-def get_theme_colors() -> Tuple[bool, str]:
-    """Return (is_dark, text_color) tuple for current Streamlit theme."""
-    is_dark = False
+def _is_dark_detected() -> bool:
+    """Detect whether the active Streamlit theme is dark.
+
+    Streamlit's theme is client-side, so ``st.get_option("theme.base")``
+    returns ``None`` when the user hasn't set an explicit theme (i.e. the
+    system/browser default is in effect).  Streamlit's own default is dark,
+    so we default to ``True`` when detection is inconclusive.
+    """
     try:
         base = st.get_option("theme.base")
         if base == "dark":
-            is_dark = True
-        elif base != "light":
-            for opt in ("theme.backgroundColor", "theme.secondaryBackgroundColor"):
-                bg = st.get_option(opt)
-                rgb = _hex_to_rgb(bg) if isinstance(bg, str) else None
-                if rgb:
-                    is_dark = _relative_luminance(rgb) < 0.5
-                    break
-            else:
-                txt = st.get_option("theme.textColor")
-                rgb = _hex_to_rgb(txt) if isinstance(txt, str) else None
-                if rgb:
-                    is_dark = _relative_luminance(rgb) > 0.5
+            return True
+        if base == "light":
+            return False
+        # base is None — try background color heuristic
+        for opt in ("theme.backgroundColor", "theme.secondaryBackgroundColor"):
+            bg = st.get_option(opt)
+            rgb = _hex_to_rgb(bg) if isinstance(bg, str) else None
+            if rgb:
+                return _relative_luminance(rgb) < 0.5
+        # Try text color heuristic (bright text ⇒ dark background)
+        txt = st.get_option("theme.textColor")
+        rgb = _hex_to_rgb(txt) if isinstance(txt, str) else None
+        if rgb:
+            return _relative_luminance(rgb) > 0.5
     except Exception:
         pass
+    # Nothing worked — Streamlit defaults to dark
+    return True
+
+
+def is_dark_theme() -> bool:
+    """Return True if the current Streamlit theme appears to be dark."""
+    return _is_dark_detected()
+
+
+def get_theme_colors() -> Tuple[bool, str]:
+    """Return (is_dark, text_color) tuple for current Streamlit theme.
+
+    Used by the network module which needs an explicit text color for PyVis.
+    Plotly charts should use ``is_dark_theme()`` instead and let Streamlit's
+    built-in Plotly theme integration handle text colors automatically.
+    """
+    is_dark = _is_dark_detected()
 
     text_color = "#fafafa" if is_dark else MIDNIGHT
     try:
         txt = st.get_option("theme.textColor")
-        if isinstance(txt, str) and _hex_to_rgb(txt):
-            text_color = txt
+        rgb = _hex_to_rgb(txt) if isinstance(txt, str) else None
+        if rgb:
+            # In dark mode, only use the override if it's bright enough to read
+            if is_dark and _relative_luminance(rgb) < 0.5:
+                pass  # keep the #fafafa default
+            else:
+                text_color = txt
     except Exception:
         pass
 
