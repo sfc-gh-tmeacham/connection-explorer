@@ -3,7 +3,7 @@ channels:
 dependencies:
   - streamlit
   - pandas
-  - altair
+  - plotly
   - pillow
   - pyvis
   - networkx

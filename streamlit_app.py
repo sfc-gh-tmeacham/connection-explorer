@@ -1,4 +1,3 @@
-import altair as alt
 import streamlit as st
 
 from components.assets import FAVICON_PATH, load_node_images, render_snowflake_header
@@ -6,12 +5,6 @@ from components.charts import render_bar_charts
 from components.data import apply_filters, get_distinct_values, load_data, process_dataframe
 from components.network import build_network_html
 from components.theme import CUSTOM_CSS
-
-# Force SVG renderer so theme-driven CSS can control chart text colors in dark/light mode.
-try:
-    alt.renderers.set_embed_options(renderer="svg", actions=False)
-except Exception:
-    pass
 
 try:  # Streamlit in Snowflake automatically injects a Snowpark session
     from snowflake.snowpark.context import get_active_session
@@ -84,25 +77,21 @@ def sidebar_filters(df):
 
 
 def render_network_section(df, network_html):
-    """Render network visualization in split view mode."""
-    col1, col2 = st.columns(2, gap="small")
-    with col1:
-        title_col, btn_col = st.columns([8, 1])
-        with title_col:
-            st.markdown(
-                '<div style="padding-left: 50px;"><span class="network-title">Network Graph</span></div>',
-                unsafe_allow_html=True
-            )
-        with btn_col:
-            st.markdown('<div class="fullscreen-btn-container"></div>', unsafe_allow_html=True)
-            if st.button("⛶", help="Full Screen"):
-                st.session_state["full_screen_mode"] = True
-                st.rerun()
+    """Render network visualization with charts below."""
+    title_col, btn_col = st.columns([8, 1])
+    with title_col:
+        st.markdown(
+            '<div style="padding-left: 50px;"><span class="network-title">Network Graph</span></div>',
+            unsafe_allow_html=True
+        )
+    with btn_col:
+        st.markdown('<div class="fullscreen-btn-container"></div>', unsafe_allow_html=True)
+        if st.button("⛶", help="Full Screen"):
+            st.session_state["full_screen_mode"] = True
+            st.rerun()
 
-        st.components.v1.html(network_html, height=800)
-
-    with col2:
-        render_bar_charts(df)
+    st.components.v1.html(network_html, height=800)
+    render_bar_charts(df)
 
 
 def main():

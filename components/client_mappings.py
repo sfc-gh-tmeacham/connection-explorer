@@ -10,7 +10,9 @@ Each tuple: (ilike_pattern, source_field, display_name)
 
 import base64
 import hashlib
+import re
 from functools import lru_cache
+from pathlib import Path
 
 CLIENT_MAPPINGS = [
     # source_field: client_app_id
@@ -47,9 +49,9 @@ CLIENT_MAPPINGS = [
     ("%HYPERION%", "application", "Hyperion"),
     ("%softoffice%", "application", "Microsoft Office"),
     ("%msacces%", "application", "Microsoft Access"),
-    ("%DATABRICKS%", "application", "Databricks/Spark"),
-    ("%dbatch%", "application", "Databricks/Spark"),
-    ("%SPARK%", "application", "Databricks/Spark"),
+    ("%DATABRICKS%", "application", "Databricks"),
+    ("%dbatch%", "application", "Databricks"),
+    ("%SPARK%", "application", "Apache Spark"),
     ("%ALTERYX%", "application", "Alteryx"),
     ("%INFA_DI%", "application", "Informatica Cloud"),
     ("%CDATA%", "application", "CData"),
@@ -101,6 +103,22 @@ CLIENT_MAPPINGS = [
     ("%diffcheck%", "application", "Diffchecker"),
     ("%flyspeed%", "application", "FlySpeed SQL"),
     ("%AdvancedQuery%", "application", "AdvancedQueryTool"),
+    # Ecosystem partners (from docs.snowflake.com/en/user-guide/ecosystem-all)
+    ("%airbyte%", "application", "Airbyte"),
+    ("%looker%", "application", "Looker"),
+    ("%datastudio%", "application", "Google Data Studio"),
+    ("%metabase%", "application", "Metabase"),
+    ("%superset%", "application", "Apache Superset"),
+    ("%matillion%", "application", "Matillion"),
+    ("%knime%", "application", "KNIME"),
+    ("%splunk%", "application", "Splunk"),
+    ("%newrelic%", "application", "New Relic"),
+    ("%datadog%", "application", "Datadog"),
+    ("%pagerduty%", "application", "PagerDuty"),
+    ("%mulesoft%", "application", "MuleSoft"),
+    ("%prefect%", "application", "Prefect"),
+    ("%dagster%", "application", "Dagster"),
+    ("%dbt%", "application", "dbt"),
     ("%python%", "application", "Python"),
     # source_field: client_app_id (fallback patterns when application IS NULL)
     ("%SNOWFLAKE%", "client_app_id", "Snowflake Web"),
@@ -111,9 +129,13 @@ CLIENT_MAPPINGS = [
 # Short abbreviations for client icon badges.
 # Keys that don't appear here get an auto-generated abbreviation.
 CLIENT_ICON_ABBREVS: dict[str, str] = {
+    "ADBC-Go": "Go",
+    "AdvancedQueryTool": "AQ",
+    "Airbyte": "Ab",
     "Airflow": "Af",
     "Alteryx": "Ax",
     "Apache Maven Surefire": "Mv",
+    "Apache Superset": "Su",
     "ArcGIS": "AG",
     "Astronomer": "As",
     "Azure App Service/WebJobs": "WJ",
@@ -125,9 +147,13 @@ CLIENT_ICON_ABBREVS: dict[str, str] = {
     "Coalesce": "Co",
     "Cognos": "Cg",
     "COSMOS": "CS",
-    "Databricks/Spark": "Db",
+    "Apache Spark": "Sk",
+    "Dagster": "Dg",
+    "Databricks": "Db",
+    "Datadog": "Dd",
     "Dataiku": "Dk",
     "DBeaver": "DB",
+    "dbt": "dt",
     "Diffchecker": "Dc",
     "Domo": "Do",
     "DTLK": "DT",
@@ -135,28 +161,38 @@ CLIENT_ICON_ABBREVS: dict[str, str] = {
     "Fads": "Fd",
     "Fivetran": "Ft",
     "FlySpeed SQL": "FS",
+    "Google Data Studio": "GD",
     "Grafana": "Gr",
     "Hyperion": "Hy",
     "IBM DataStage": "DS",
     "Informatica Cloud": "Ic",
+    "install4j": "i4",
     "IntelliJ": "IJ",
     "Jarvis": "Jv",
     "Javascript": "JS",
     "JDBC": "JD",
     "Jenkins": "Jk",
     "Kafka": "Kf",
+    "KNIME": "Kn",
     "Laserfiche": "Lf",
+    "Looker": "Lk",
+    "Matillion": "Mt",
+    "Metabase": "Mb",
     "Microsoft Access": "MA",
     "Microsoft IIS": "II",
     "Microsoft Office": "MO",
     "MicroStrategy": "MS",
+    "MuleSoft": "Mu",
+    "New Relic": "NR",
     "NEXIS": "Nx",
     "NICE": "Nc",
     "Nimbus": "Nb",
+    "PagerDuty": "PD",
     "Palantir": "Pl",
     "Perl": "Pr",
     "Power BI": "PB",
     "PowerShell": "PS",
+    "Prefect": "Pf",
     "Presto": "Pt",
     "Python": "Py",
     "Qlik Replicate": "Qk",
@@ -168,6 +204,7 @@ CLIENT_ICON_ABBREVS: dict[str, str] = {
     "SnowCLI": "SC",
     "Snowflake Web": "Sn",
     "Snowpark": "Sp",
+    "Splunk": "Sl",
     "SQL Server": "SQ",
     "SSIS": "SS",
     "SSRS/PBIRS": "SR",
@@ -182,10 +219,113 @@ CLIENT_ICON_ABBREVS: dict[str, str] = {
     "UiPath": "UP",
     "VSCode": "VS",
     "WhereScape": "WS",
-    "AdvancedQueryTool": "AQ",
-    "ADBC-Go": "Go",
-    "install4j": "i4",
 }
+
+
+ICONS_DIR = Path(__file__).resolve().parent.parent / "static" / "client-icons"
+
+# Mapping from display name to SVG filename in static/client-icons/.
+# Tools listed here get real brand logos; all others fall back to letter circles.
+CLIENT_ICON_FILES: dict[str, str] = {
+    "ADBC-Go": "go.svg",
+    "Airbyte": "airbyte.svg",
+    "Airflow": "airflow.svg",
+    "Alteryx": "alteryx.svg",
+    "Apache Maven Surefire": "apachemaven.svg",
+    "Apache Spark": "apachespark.svg",
+    "Apache Superset": "apachesuperset.svg",
+    "ArcGIS": "arcgis.svg",
+    "Astronomer": "astronomer.svg",
+    "Azure App Service/WebJobs": "microsoftazure.svg",
+    "Azure Data Factory": "azuredatafactory.svg",
+    "Boomi": "sap.svg",
+    "Business Objects": "sap.svg",
+    "Cirrus CI": "cirrusci.svg",
+    "Cognos": "ibm.svg",
+    "Dagster": "prefect.svg",
+    "Databricks": "databricks.svg",
+    "Datadog": "datadog.svg",
+    "Dataiku": "dataiku.svg",
+    "DBeaver": "dbeaver.svg",
+    "dbt": "dbt.svg",
+    "Excel": "excel.svg",
+    "Fivetran": "fivetran.svg",
+    "Google Data Studio": "googledatastudio.svg",
+    "Grafana": "grafana.svg",
+    "Hyperion": "oracle.svg",
+    "IBM DataStage": "ibm.svg",
+    "Informatica Cloud": "informatica.svg",
+    "IntelliJ": "intellijidea.svg",
+    "Javascript": "javascript.svg",
+    "JDBC": "openjdk.svg",
+    "Jenkins": "jenkins.svg",
+    "Kafka": "apachekafka.svg",
+    "KNIME": "knime.svg",
+    "Looker": "looker.svg",
+    "Matillion": "matillion.svg",
+    "Metabase": "metabase.svg",
+    "Microsoft Access": "microsoftaccess.svg",
+    "Microsoft IIS": "microsoftazure.svg",
+    "Microsoft Office": "microsoftoffice.svg",
+    "MicroStrategy": "microstrategy.svg",
+    "MuleSoft": "mulesoft.svg",
+    "New Relic": "newrelic.svg",
+    "PagerDuty": "pagerduty.svg",
+    "Palantir": "palantir.svg",
+    "Perl": "perl.svg",
+    "Power BI": "powerbi.svg",
+    "PowerShell": "powershell.svg",
+    "Prefect": "prefect.svg",
+    "Presto": "presto.svg",
+    "Python": "python.svg",
+    "Qlik Replicate": "qlik.svg",
+    "RStudio": "r.svg",
+    "Salesforce": "salesforce.svg",
+    "SAS": "sas.svg",
+    "Snowflake Web": "snowflake.svg",
+    "SnowCLI": "snowflake.svg",
+    "Snowpark": "snowflake.svg",
+    "Splunk": "splunk.svg",
+    "SQL Server": "microsoftsqlserver.svg",
+    "SSIS": "microsoftsqlserver.svg",
+    "SSRS/PBIRS": "microsoftsqlserver.svg",
+    "Starburst": "starburst.svg",
+    "Tableau": "tableau.svg",
+    "Talend": "talend.svg",
+    "Teradata": "teradata.svg",
+    "Tibco Spotfire": "tibco.svg",
+    "Tomcat": "apachetomcat.svg",
+    "Toad": "oracle.svg",
+    "UiPath": "uipath.svg",
+    "VSCode": "vscode.svg",
+}
+
+_PATH_RE = re.compile(r'd="([^"]+)"')
+_VIEWBOX_RE = re.compile(r'viewBox="([^"]+)"')
+
+
+@lru_cache(maxsize=64)
+def _load_svg_paths(filename: str) -> tuple[list[str], float] | None:
+    """Read an SVG file and extract all path data strings plus the viewBox size.
+
+    Returns (paths, viewbox_size) where viewbox_size is the max of width/height
+    from the viewBox attribute, or None if the file can't be read.
+    """
+    svg_path = ICONS_DIR / filename
+    if not svg_path.exists():
+        return None
+    text = svg_path.read_text(encoding="utf-8")
+    paths = _PATH_RE.findall(text)
+    if not paths:
+        return None
+    # Parse viewBox to get the native coordinate size
+    vb_match = _VIEWBOX_RE.search(text)
+    if vb_match:
+        parts = vb_match.group(1).split()
+        vb_size = max(float(parts[2]), float(parts[3]))
+    else:
+        vb_size = 24.0  # simple-icons default
+    return paths, vb_size
 
 
 def _abbreviation(name: str) -> str:
@@ -216,19 +356,41 @@ def _name_to_hue(name: str) -> int:
 def generate_client_icon_uri(name: str) -> str:
     """Generate a base64 SVG data URI icon for a client application.
 
-    Returns a colored circle with a 1-2 letter abbreviation.
+    Uses a real brand SVG icon when available (loaded from static/client-icons/),
+    falling back to a colored circle with a 1-2 letter abbreviation.
     Colors are deterministic per client name.
     """
-    abbrev = _abbreviation(name)
     hue = _name_to_hue(name)
-    # Use moderate saturation and lightness for readability in both themes
     bg_color = f"hsl({hue}, 55%, 50%)"
-    svg = (
-        f'<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">'
-        f'<circle cx="64" cy="64" r="60" fill="{bg_color}" stroke="white" stroke-width="3"/>'
-        f'<text x="64" y="64" text-anchor="middle" dominant-baseline="central" '
-        f'font-family="Lato, Arial, sans-serif" font-weight="700" font-size="48" fill="white">'
-        f'{abbrev}</text></svg>'
-    )
+
+    # Try to load a real brand icon
+    icon_file = CLIENT_ICON_FILES.get(name)
+    svg_data = _load_svg_paths(icon_file) if icon_file else None
+
+    if svg_data:
+        paths, vb_size = svg_data
+        # Scale the icon to fit inside a 72x72 area centered in 128x128
+        icon_area = 72.0
+        scale = icon_area / vb_size
+        offset = (128.0 - vb_size * scale) / 2.0
+        paths_svg = "".join(f'<path d="{p}" fill="white"/>' for p in paths)
+        svg = (
+            f'<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">'
+            f'<circle cx="64" cy="64" r="60" fill="{bg_color}" stroke="white" stroke-width="3"/>'
+            f'<g transform="translate({offset:.1f},{offset:.1f}) scale({scale:.4f})">'
+            f'{paths_svg}'
+            f'</g></svg>'
+        )
+    else:
+        # Fallback: colored circle with letter abbreviation
+        abbrev = _abbreviation(name)
+        svg = (
+            f'<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">'
+            f'<circle cx="64" cy="64" r="60" fill="{bg_color}" stroke="white" stroke-width="3"/>'
+            f'<text x="64" y="64" text-anchor="middle" dominant-baseline="central" '
+            f'font-family="Lato, Arial, sans-serif" font-weight="700" font-size="48" fill="white">'
+            f'{abbrev}</text></svg>'
+        )
+
     encoded = base64.b64encode(svg.encode()).decode()
     return f"data:image/svg+xml;base64,{encoded}"
