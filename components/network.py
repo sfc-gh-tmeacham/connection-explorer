@@ -437,13 +437,15 @@ export default function(component) {
         physics: {
             enabled: true,
             barnesHut: {
-                gravitationalConstant: -80000,
-                springLength: 200,
-                springConstant: 0.00007,
+                gravitationalConstant: -120000,
+                springLength: 400,
+                springConstant: 0.001,
+                damping: 0.3,
+                avoidOverlap: 0.5,
             },
             stabilization: {
                 enabled: true,
-                iterations: 300,
+                iterations: 1000,
             },
             adaptiveTimestep: true,
             minVelocity: 0.75,
