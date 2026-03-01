@@ -109,21 +109,25 @@ def render_network_section(df, node_images, session_obj):
         node_images: Dict of base-64 data-URI images keyed by node type.
         session_obj: Active Snowflake session (or ``None``).
     """
-    title_col, toggle_col, btn_col = st.columns([7, 1.5, 0.5])
+    title_col, toggle_col, btn_col = st.columns([7, 2.5, 0.5])
     with title_col:
         st.markdown(
             '<div style="padding-left: 50px;"><span class="network-title">Network Graph</span></div>',
             unsafe_allow_html=True
         )
     with toggle_col:
-        hide_wh = st.checkbox("Hide Warehouses", key="hide_warehouses")
+        tc1, tc2 = st.columns(2)
+        with tc1:
+            hide_wh = st.checkbox("Hide Warehouses", key="hide_warehouses")
+        with tc2:
+            cluster_db = st.checkbox("Cluster Databases", key="cluster_databases")
     with btn_col:
         st.markdown('<div class="fullscreen-btn-container"></div>', unsafe_allow_html=True)
         if st.button("⛶", help="Full Screen"):
             st.session_state["full_screen_mode"] = True
             st.rerun()
 
-    render_network(df, node_images, session_obj, fullscreen=False, hide_warehouses=hide_wh)
+    render_network(df, node_images, session_obj, fullscreen=False, hide_warehouses=hide_wh, cluster_databases=cluster_db)
     render_bar_charts(df)
 
 
@@ -248,7 +252,8 @@ def main():
 
         node_images = load_node_images()
         hide_wh = st.session_state.get("hide_warehouses", False)
-        render_network(filtered_df, node_images, session, fullscreen=True, hide_warehouses=hide_wh)
+        cluster_db = st.session_state.get("cluster_databases", False)
+        render_network(filtered_df, node_images, session, fullscreen=True, hide_warehouses=hide_wh, cluster_databases=cluster_db)
         return
 
     # Normal mode

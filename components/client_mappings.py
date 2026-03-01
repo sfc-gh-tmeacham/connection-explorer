@@ -282,6 +282,7 @@ CLIENT_ICON_FILES: dict[str, str] = {
     "RStudio": "r.svg",
     "Salesforce": "salesforce.svg",
     "SAS": "sas.svg",
+    "Sigma": "sigma.svg",
     "Snowflake Web": "snowflake.svg",
     "SnowCLI": "snowflake.svg",
     "Snowpark": "snowflake.svg",

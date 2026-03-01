@@ -354,7 +354,6 @@ _COMPONENT_HTML = f"""
             <div style="font-size:11px; opacity:0.7;">Click canvas to restore</div>
         </div>
         <button class="legend-btn" id="resetClustersBtn" style="display:none;">Expand All</button>
-        <button class="legend-btn" id="clusterBtn">Cluster Databases</button>
     </div>
 </div>
 """
@@ -547,6 +546,9 @@ export default function(component) {
 
             // Re-run physics so restored network spreads out and fits
             restabilize();
+
+            // Tell Python the isolation was cleared
+            setTriggerValue('selected_node', null);
         }
     });
 
@@ -597,7 +599,6 @@ export default function(component) {
     const clusterMap = data.clusters || {};
     let clustersActive = false;
 
-    const clusterBtn = parentElement.querySelector('#clusterBtn');
     const resetBtn = parentElement.querySelector('#resetClustersBtn');
 
     function applyClusters() {
@@ -635,7 +636,6 @@ export default function(component) {
             })(label, members);
         }
         clustersActive = true;
-        if (clusterBtn) clusterBtn.style.display = 'none';
         if (resetBtn) resetBtn.style.display = 'block';
         network.setOptions({ physics: { enabled: true } });
         network.once('stabilizationIterationsDone', function() {
@@ -654,7 +654,6 @@ export default function(component) {
         }
         clustersActive = false;
         if (resetBtn) resetBtn.style.display = 'none';
-        if (clusterBtn) clusterBtn.style.display = 'block';
         network.setOptions({ physics: { enabled: true } });
         network.once('stabilizationIterationsDone', function() {
             network.setOptions({ physics: { enabled: false } });
@@ -662,8 +661,61 @@ export default function(component) {
         network.stabilize(150);
     }
 
-    if (clusterBtn) clusterBtn.onclick = applyClusters;
     if (resetBtn) resetBtn.onclick = resetClusters;
+
+    // Auto-cluster on load when checkbox is checked
+    if (data.cluster_databases) {
+        applyClusters();
+    }
+
+    // --- Auto-isolate on load if a node was previously selected ---
+    if (data.isolated_node) {
+        const nodeId = data.isolated_node;
+        const paths = data.paths || [];
+        const keepNodes = [nodeId];
+        const keepPathIndices = [];
+
+        for (let p = 0; p < paths.length; p++) {
+            const client = paths[p][0];
+            const wh = paths[p][1];
+            const db = paths[p][2];
+            if (client === nodeId || wh === nodeId || db === nodeId) {
+                if (keepNodes.indexOf(client) === -1) keepNodes.push(client);
+                if (keepNodes.indexOf(wh) === -1) keepNodes.push(wh);
+                if (keepNodes.indexOf(db) === -1) keepNodes.push(db);
+                keepPathIndices.push(p);
+            }
+        }
+
+        const keepEdgeIds = [];
+        for (let i = 0; i < originalEdges.length; i++) {
+            const e = originalEdges[i];
+            if (e.pathIndex !== undefined && keepPathIndices.indexOf(e.pathIndex) !== -1) {
+                keepEdgeIds.push(e.id);
+            }
+        }
+
+        const removeNodeIds = [];
+        const currentNodeIds = nodes.getIds();
+        for (let i = 0; i < currentNodeIds.length; i++) {
+            if (keepNodes.indexOf(currentNodeIds[i]) === -1) {
+                removeNodeIds.push(currentNodeIds[i]);
+            }
+        }
+        if (removeNodeIds.length > 0) nodes.remove(removeNodeIds);
+
+        const removeEdgeIds = [];
+        const currentEdgeIds = edges.getIds();
+        for (let i = 0; i < currentEdgeIds.length; i++) {
+            if (keepEdgeIds.indexOf(currentEdgeIds[i]) === -1) {
+                removeEdgeIds.push(currentEdgeIds[i]);
+            }
+        }
+        if (removeEdgeIds.length > 0) edges.remove(removeEdgeIds);
+
+        isolated = true;
+        restabilize();
+    }
 
     // --- Cleanup ---
     return function() {
@@ -712,7 +764,8 @@ def _get_component():
 
 def render_network(df: pd.DataFrame, _node_images: Dict[str, str],
                    session, fullscreen: bool = False,
-                   hide_warehouses: bool = False):
+                   hide_warehouses: bool = False,
+                   cluster_databases: bool = False):
     """Build and render the interactive network graph as a v2 component.
 
     Aggregates the access DataFrame, computes per-node statistics, then
@@ -733,6 +786,8 @@ def render_network(df: pd.DataFrame, _node_images: Dict[str, str],
             viewport height.
         hide_warehouses: If ``True``, warehouse nodes are omitted and
             edges connect clients directly to databases.
+        cluster_databases: If ``True``, database nodes are automatically
+            grouped into vis.js clusters on load based on naming rules.
 
     Returns:
         The ``BidiComponentResult`` from the mounted component (with a
@@ -871,11 +926,19 @@ def render_network(df: pd.DataFrame, _node_images: Dict[str, str],
 
     clusters = {label: members for label, members in cluster_members.items() if members}
 
+    isolated_node = st.session_state.get("isolated_node", None)
+    # Clear isolation if the node no longer exists in the current graph
+    if isolated_node and isolated_node not in added_nodes:
+        isolated_node = None
+        st.session_state["isolated_node"] = None
+
     component_data = {
         "nodes": nodes,
         "edges": edges,
         "paths": paths,
         "clusters": clusters,
+        "cluster_databases": cluster_databases,
+        "isolated_node": isolated_node,
         "fullscreen": fullscreen,
     }
 
@@ -888,5 +951,9 @@ def render_network(df: pd.DataFrame, _node_images: Dict[str, str],
         height=height,
         key="network_graph",
     )
+
+    # Persist the isolated node for checkbox toggles / reruns
+    if result and hasattr(result, 'selected_node'):
+        st.session_state["isolated_node"] = result.selected_node
 
     return result
