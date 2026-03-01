@@ -1018,7 +1018,7 @@ def render_network(df: pd.DataFrame, _node_images: Dict[str, str],
         # Add nodes (deduplicated)
         if database not in added_nodes:
             s = node_stats.get(database, {})
-            db_size = _log_scale(s.get("total", 0), global_min, global_max, 120, 300)
+            db_size = _log_scale(s.get("total", 0), global_min, global_max, 80, 200)
             tooltip = _build_tooltip(database, "Database", s, org_name, current_account)
 
             cluster_label = _assign_cluster(database)
@@ -1036,7 +1036,7 @@ def render_network(df: pd.DataFrame, _node_images: Dict[str, str],
 
         if not hide_warehouses and warehouse not in added_nodes:
             s = node_stats.get(warehouse, {})
-            wh_size = _log_scale(s.get("total", 0), global_min, global_max, 120, 300)
+            wh_size = _log_scale(s.get("total", 0), global_min, global_max, 80, 200)
             tooltip = _build_tooltip(warehouse, "Warehouse", s, org_name, current_account)
             nodes.append({
                 "id": warehouse, "label": warehouse, "title": tooltip,
