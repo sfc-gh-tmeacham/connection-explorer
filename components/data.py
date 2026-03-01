@@ -6,7 +6,10 @@ and applying sidebar filter selections.  All expensive operations are
 wrapped with ``st.cache_data`` for performance.
 """
 
+import logging
 from typing import Sequence
+
+logger = logging.getLogger(__name__)
 
 import pandas as pd
 import streamlit as st
@@ -290,6 +293,7 @@ def load_data(session) -> pd.DataFrame:
         A DataFrame with the standard 7-column schema.
     """
     if session is None:
+        logger.info("No Snowflake session — loading sample data")
         return sample_dataframe(session)
     try:
         ensure_tables_exist(session)
@@ -299,12 +303,16 @@ def load_data(session) -> pd.DataFrame:
             ORDER BY access_count DESC;
         """
 
+        logger.info("Querying Snowflake for access data")
         result_df = session.sql(query).to_pandas()
         if result_df.empty:
+            logger.warning("Snowflake query returned empty — falling back to sample data")
             st.warning("No data found. Using sample data.")
             return sample_dataframe(session)
+        logger.info("Loaded %d rows from Snowflake", len(result_df))
         return result_df
     except Exception as exc:
+        logger.error("Snowflake query failed: %s", exc)
         st.error(f"Unable to query account usage data. Falling back to sample data.\n\nError: {exc}")
         return sample_dataframe(session)
 

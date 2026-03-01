@@ -6,7 +6,11 @@ lookup table if they do not already exist.  The classification table is
 seeded via MERGE from ``CLIENT_MAPPINGS`` so re-runs are idempotent.
 """
 
+import logging
+
 import streamlit as st
+
+logger = logging.getLogger(__name__)
 
 from components.client_mappings import CLIENT_MAPPINGS
 
@@ -84,4 +88,5 @@ def ensure_tables_exist(session) -> None:
         """).collect()
 
     except Exception as exc:
+        logger.error("Auto-setup failed: %s", exc)
         st.warning(f"Auto-setup could not create tables (may lack privileges): {exc}")

@@ -8,11 +8,14 @@ built-in tooltip mechanism is unavailable inside Components v2.
 """
 
 import json
+import logging
 import math
 import os
 from collections import defaultdict
 from functools import lru_cache
 from typing import Dict
+
+logger = logging.getLogger(__name__)
 
 import pandas as pd
 import streamlit as st
@@ -573,15 +576,120 @@ export default function(component) {
         if (tooltip) tooltip.style.display = 'none';
     }
 
+    // --- Hover: glow effect + fade unrelated nodes/edges ---
+    let hoverActive = false;
+    let hoveredNodeId = null;
+
+    function getConnectedSet(nodeId) {
+        const paths = data.paths || [];
+        const connectedNodes = [nodeId];
+        const connectedPathIndices = [];
+        for (let p = 0; p < paths.length; p++) {
+            const client = paths[p][0];
+            const wh = paths[p][1];
+            const db = paths[p][2];
+            if (client === nodeId || wh === nodeId || db === nodeId) {
+                if (connectedNodes.indexOf(client) === -1) connectedNodes.push(client);
+                if (connectedNodes.indexOf(wh) === -1) connectedNodes.push(wh);
+                if (connectedNodes.indexOf(db) === -1) connectedNodes.push(db);
+                connectedPathIndices.push(p);
+            }
+        }
+        const connectedEdgeIds = [];
+        const allEdges = edges.get();
+        for (let i = 0; i < allEdges.length; i++) {
+            if (allEdges[i].pathIndex !== undefined &&
+                connectedPathIndices.indexOf(allEdges[i].pathIndex) !== -1) {
+                connectedEdgeIds.push(allEdges[i].id);
+            }
+        }
+        return { connectedNodes: connectedNodes, connectedEdgeIds: connectedEdgeIds };
+    }
+
+    // Store original edge colors so we can restore them after hover fade
+    const edgeOriginalColors = {};
+    (function() {
+        const allEdgeData = edges.get();
+        for (let i = 0; i < allEdgeData.length; i++) {
+            edgeOriginalColors[allEdgeData[i].id] = allEdgeData[i].color;
+        }
+    })();
+
+    function applyHoverFade(nodeId) {
+        if (isolated) return;  // Don't fade when already isolated via click
+        const result = getConnectedSet(nodeId);
+        const keepNodes = result.connectedNodes;
+        const keepEdges = result.connectedEdgeIds;
+
+        // Fade unrelated nodes
+        const nodeUpdates = [];
+        const allNodes = nodes.get();
+        for (let i = 0; i < allNodes.length; i++) {
+            var n = allNodes[i];
+            if (keepNodes.indexOf(n.id) === -1) {
+                nodeUpdates.push({ id: n.id, opacity: 0.12 });
+            } else if (n.id === nodeId) {
+                nodeUpdates.push({ id: n.id, opacity: 1.0, shadow: true,
+                    shadowColor: 'rgba(41,181,232,0.6)', shadowSize: 20, shadowX: 0, shadowY: 0 });
+            } else {
+                nodeUpdates.push({ id: n.id, opacity: 1.0 });
+            }
+        }
+        if (nodeUpdates.length > 0) nodes.update(nodeUpdates);
+
+        // Fade unrelated edges (preserve original color string)
+        const edgeUpdates = [];
+        const allEdgeData = edges.get();
+        for (let i = 0; i < allEdgeData.length; i++) {
+            var e = allEdgeData[i];
+            var origColor = edgeOriginalColors[e.id] || e.color;
+            var colorStr = (typeof origColor === 'string') ? origColor : (origColor.color || '#848484');
+            if (keepEdges.indexOf(e.id) === -1) {
+                edgeUpdates.push({ id: e.id, color: { color: colorStr, opacity: 0.08 } });
+            } else {
+                edgeUpdates.push({ id: e.id, color: { color: colorStr, opacity: 1.0 } });
+            }
+        }
+        if (edgeUpdates.length > 0) edges.update(edgeUpdates);
+
+        hoverActive = true;
+        hoveredNodeId = nodeId;
+    }
+
+    function clearHoverFade() {
+        if (!hoverActive) return;
+        // Restore all nodes to full opacity, remove shadow
+        const nodeUpdates = [];
+        const allNodes = nodes.get();
+        for (let i = 0; i < allNodes.length; i++) {
+            nodeUpdates.push({ id: allNodes[i].id, opacity: 1.0, shadow: false });
+        }
+        if (nodeUpdates.length > 0) nodes.update(nodeUpdates);
+
+        // Restore all edges to their original color
+        const edgeUpdates = [];
+        const allEdgeData = edges.get();
+        for (let i = 0; i < allEdgeData.length; i++) {
+            var orig = edgeOriginalColors[allEdgeData[i].id];
+            edgeUpdates.push({ id: allEdgeData[i].id, color: orig !== undefined ? orig : allEdgeData[i].color });
+        }
+        if (edgeUpdates.length > 0) edges.update(edgeUpdates);
+
+        hoverActive = false;
+        hoveredNodeId = null;
+    }
+
     network.on('hoverNode', function(params) {
         var nodeData = nodes.get(params.node);
         if (nodeData && nodeData.title) {
             showTooltip(nodeData.title, params);
         }
+        applyHoverFade(params.node);
     });
 
     network.on('blurNode', function() {
         hideTooltip();
+        clearHoverFade();
     });
 
     network.on('hoverEdge', function(params) {
@@ -795,6 +903,7 @@ def render_network(df: pd.DataFrame, _node_images: Dict[str, str],
     """
     if df.empty:
         st.info("No rows available to render.")
+        logger.warning("render_network called with empty DataFrame")
         return None
 
     current_account = get_current_account(session)
@@ -817,6 +926,7 @@ def render_network(df: pd.DataFrame, _node_images: Dict[str, str],
         "background": "rgba(0,0,0,0)",
         "border": "rgba(0,0,0,0)",
         "highlight": {"background": "rgba(0,0,0,0)", "border": "rgba(0,0,0,0)"},
+        "hover": {"background": "rgba(0,0,0,0)", "border": "rgba(0,0,0,0)"},
     }
     shape_props = {"useBorderWithImage": True, "borderType": "circle"}
 

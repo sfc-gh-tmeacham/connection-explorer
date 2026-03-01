@@ -5,12 +5,15 @@ the branded header block at the top of the Streamlit app.
 """
 
 import base64
+import logging
 from pathlib import Path
 from typing import Dict
 
+logger = logging.getLogger(__name__)
+
 import streamlit as st
 
-from components.theme import SNOWFLAKE_BLUE
+from components.theme import MID_BLUE, SNOWFLAKE_BLUE
 
 APP_DIR = Path(__file__).resolve().parent.parent
 STATIC_DIR = APP_DIR / "static"
@@ -55,9 +58,44 @@ def load_node_images() -> Dict[str, str]:
             encoded = base64.b64encode(image_file.read()).decode("utf-8")
         return f"data:image/svg+xml;base64,{encoded}"
 
+    # Wrap warehouse icon inside a diamond-shaped badge (matches the circle
+    # treatment that client nodes get in client_mappings.py).
+    with open(STATIC_DIR / "snowflake-warehouse.svg", "r") as f:
+        wh_inner = f.read()
+    # Strip the outer <svg> wrapper so we can nest the content inside our own.
+    # The inner content is a <g> with the potrace path data.  Change the fill
+    # from Snowflake blue to white so the gear is visible on the blue diamond.
+    inner_content = wh_inner.split(">", 1)[1].rsplit("</svg>", 1)[0]
+    inner_content = inner_content.replace('fill="#29B5E8"', 'fill="white"')
+    diamond_svg = (
+        '<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">'
+        f'<polygon points="64,4 124,64 64,124 4,64" fill="{MID_BLUE}" stroke="white" stroke-width="3"/>'
+        '<svg x="28" y="28" width="72" height="72" viewBox="0 0 324 324">'
+        f'{inner_content}'
+        '</svg>'
+        '</svg>'
+    )
+    wh_encoded = base64.b64encode(diamond_svg.encode()).decode("utf-8")
+    logger.info("Loaded node images: warehouse (diamond), database (square)")
+
+    # Wrap database icon inside a rounded-square badge.
+    with open(STATIC_DIR / "snowflake-database.svg", "r") as f:
+        db_inner = f.read()
+    db_content = db_inner.split(">", 1)[1].rsplit("</svg>", 1)[0]
+    db_content = db_content.replace('fill="#29B5E8"', 'fill="white"')
+    square_svg = (
+        '<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">'
+        '<rect x="4" y="4" width="120" height="120" rx="12" ry="12" fill="#29B5E8" stroke="white" stroke-width="3"/>'
+        '<svg x="28" y="28" width="72" height="72" viewBox="0 0 200 203">'
+        f'{db_content}'
+        '</svg>'
+        '</svg>'
+    )
+    db_encoded = base64.b64encode(square_svg.encode()).decode("utf-8")
+
     return {
-        "database": encode_image("snowflake-database.svg"),
-        "warehouse": encode_image("snowflake-warehouse.svg"),
+        "database": f"data:image/svg+xml;base64,{db_encoded}",
+        "warehouse": f"data:image/svg+xml;base64,{wh_encoded}",
     }
 
 

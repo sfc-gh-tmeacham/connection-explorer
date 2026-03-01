@@ -5,6 +5,14 @@ interactive vis.js network graph with accompanying Plotly bar charts and
 Sankey diagrams.  Supports a fullscreen mode for the network graph.
 """
 
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(name)s %(levelname)s %(message)s",
+)
+logger = logging.getLogger(__name__)
+
 import streamlit as st
 
 from components.assets import FAVICON_PATH, load_node_images, render_snowflake_header
@@ -162,6 +170,7 @@ def main():
             st.session_state[key] = [val] if val else []
 
     is_fullscreen = st.session_state.get("full_screen_mode", False)
+    logger.info("App started — fullscreen=%s", is_fullscreen)
 
     if is_fullscreen:
         st.markdown("""

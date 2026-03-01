@@ -6,9 +6,13 @@ a Client x Database heatmap, a hierarchical treemap, per-database
 read/write ratio donuts, and read/write Sankey flow diagrams.
 """
 
+import logging
+
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
+
+logger = logging.getLogger(__name__)
 
 from plotly.subplots import make_subplots
 
@@ -532,6 +536,8 @@ def render_bar_charts(df: pd.DataFrame) -> None:
     if df.empty:
         st.warning("Apply different filters or load more data to see charts.")
         return
+
+    logger.info("Rendering charts for %d rows", len(df))
 
     is_dark = is_dark_theme()
     grid_color = "rgba(255,255,255,0.18)" if is_dark else "rgba(0,0,0,0.10)"
