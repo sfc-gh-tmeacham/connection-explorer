@@ -6,9 +6,9 @@ streamlit:
   main_file: streamlit_app.py
   query_warehouse: COMPUTE_WH
   additional_source_files:
-    - static/snowflake-bug-logo.png
-    - static/snowflake-database.png
-    - static/snowflake-warehouse.png
+    - static/snowflake-bug-logo.svg
+    - static/snowflake-database.svg
+    - static/snowflake-warehouse.svg
     - environment.yml
     - components/__init__.py
     - components/theme.py

@@ -14,7 +14,7 @@ from components.theme import SNOWFLAKE_BLUE
 
 APP_DIR = Path(__file__).resolve().parent.parent
 STATIC_DIR = APP_DIR / "static"
-FAVICON_PATH = STATIC_DIR / "snowflake-bug-logo.png"
+FAVICON_PATH = STATIC_DIR / "snowflake-bug-logo.svg"
 
 
 @st.cache_resource(show_spinner=False)
@@ -25,9 +25,9 @@ def load_snowflake_logo() -> str:
     Streamlit server lifetime.
 
     Returns:
-        A UTF-8 base64 string of the PNG image data.
+        A UTF-8 base64 string of the SVG image data.
     """
-    with open(STATIC_DIR / "snowflake-bug-logo.png", "rb") as f:
+    with open(STATIC_DIR / "snowflake-bug-logo.svg", "rb") as f:
         encoded = base64.b64encode(f.read()).decode("utf-8")
     return encoded
 
@@ -38,26 +38,26 @@ def load_node_images() -> Dict[str, str]:
 
     Returns:
         A dict mapping node type names (``"database"``, ``"warehouse"``) to
-        ``data:image/png;base64,...`` URI strings suitable for vis.js image
-        nodes.
+        ``data:image/svg+xml;base64,...`` URI strings suitable for vis.js
+        image nodes.
     """
 
     def encode_image(file_name: str) -> str:
-        """Encode a single PNG file from the static directory.
+        """Encode a single SVG file from the static directory.
 
         Args:
             file_name: Filename relative to ``STATIC_DIR``.
 
         Returns:
-            A ``data:image/png;base64,...`` URI string.
+            A ``data:image/svg+xml;base64,...`` URI string.
         """
         with open(STATIC_DIR / file_name, "rb") as image_file:
             encoded = base64.b64encode(image_file.read()).decode("utf-8")
-        return f"data:image/png;base64,{encoded}"
+        return f"data:image/svg+xml;base64,{encoded}"
 
     return {
-        "database": encode_image("snowflake-database.png"),
-        "warehouse": encode_image("snowflake-warehouse.png"),
+        "database": encode_image("snowflake-database.svg"),
+        "warehouse": encode_image("snowflake-warehouse.svg"),
     }
 
 
@@ -79,7 +79,7 @@ def render_snowflake_header() -> None:
                 Data Lake Explorer
             </h1>
             <div style="display: flex; align-items: center; gap: 8px; margin-top: 8px;">
-                <img src="data:image/png;base64,{logo_b64}" width="24" height="24" style="display: block;">
+                <img src="data:image/svg+xml;base64,{logo_b64}" width="24" height="24" style="display: block;">
                 <span style="font-family: Lato, sans-serif; font-size: 18px; font-weight: 700; 
                              color: {SNOWFLAKE_BLUE}; letter-spacing: 0.02em; line-height: 1;">
                     Horizon Catalog
