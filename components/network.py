@@ -417,6 +417,11 @@ export default function(component) {
     const nodes = new vis.DataSet(data.nodes);
     const edges = new vis.DataSet(data.edges);
 
+    // Use the pre-built nodeTypeMap passed as top-level component data.
+    // This avoids any issues with vis.js DataSet or Streamlit serialization
+    // stripping custom properties from individual node objects.
+    const nodeTypeMap = data.nodeTypeMap || {};
+
     const options = {
         nodes: {
             font: {
@@ -629,9 +634,8 @@ export default function(component) {
             if (keepNodes.indexOf(n.id) === -1) {
                 nodeUpdates.push({ id: n.id, opacity: 0.12 });
             } else if (n.id === nodeId) {
-                nodeUpdates.push({ id: n.id, opacity: 1.0, shadow: true,
-                    shadowColor: 'rgba(41,181,232,0.6)', shadowSize: 20, shadowX: 0, shadowY: 0 });
-            } else {
+                    nodeUpdates.push({ id: n.id, opacity: 1.0 });
+                } else {
                 nodeUpdates.push({ id: n.id, opacity: 1.0 });
             }
         }
@@ -654,15 +658,19 @@ export default function(component) {
 
         hoverActive = true;
         hoveredNodeId = nodeId;
+        network.redraw();
     }
 
     function clearHoverFade() {
         if (!hoverActive) return;
-        // Restore all nodes to full opacity, remove shadow
+        hoveredNodeId = null;
+        hoverActive = false;
+
+        // Restore all nodes to full opacity
         const nodeUpdates = [];
         const allNodes = nodes.get();
         for (let i = 0; i < allNodes.length; i++) {
-            nodeUpdates.push({ id: allNodes[i].id, opacity: 1.0, shadow: false });
+            nodeUpdates.push({ id: allNodes[i].id, opacity: 1.0 });
         }
         if (nodeUpdates.length > 0) nodes.update(nodeUpdates);
 
@@ -674,10 +682,79 @@ export default function(component) {
             edgeUpdates.push({ id: allEdgeData[i].id, color: orig !== undefined ? orig : allEdgeData[i].color });
         }
         if (edgeUpdates.length > 0) edges.update(edgeUpdates);
-
-        hoverActive = false;
-        hoveredNodeId = null;
     }
+
+    // --- Canvas glow around hovered node, shape-matched ---
+    // Cache for decoded node types so we only decode base64 once per node.
+    var _nodeTypeCache = {};
+    function detectNodeType(nodeId) {
+        if (_nodeTypeCache[nodeId]) return _nodeTypeCache[nodeId];
+        // Try the top-level map first
+        if (nodeTypeMap[nodeId]) { _nodeTypeCache[nodeId] = nodeTypeMap[nodeId]; return nodeTypeMap[nodeId]; }
+        // Fall back: decode the base64 SVG image and look for shape markers
+        var nd = nodes.get(nodeId);
+        if (nd && nd.image && nd.image.indexOf('base64,') !== -1) {
+            try {
+                var svg = atob(nd.image.split('base64,')[1]);
+                if (svg.indexOf('<polygon') !== -1) { _nodeTypeCache[nodeId] = 'warehouse'; return 'warehouse'; }
+                if (svg.indexOf('<rect') !== -1) { _nodeTypeCache[nodeId] = 'database'; return 'database'; }
+            } catch(e) {}
+        }
+        _nodeTypeCache[nodeId] = 'client';
+        return 'client';
+    }
+
+    network.on('afterDrawing', function(ctx) {
+        if (!hoveredNodeId) return;
+        var pos = network.getPositions([hoveredNodeId])[hoveredNodeId];
+        if (!pos) return;
+        var nodeData = nodes.get(hoveredNodeId);
+        var nodeSize = (nodeData && nodeData.size ? nodeData.size : 30);
+        var ntype = detectNodeType(hoveredNodeId);
+        var r = nodeSize + 10;
+
+        ctx.save();
+        ctx.beginPath();
+
+        if (ntype === 'warehouse') {
+            // Diamond
+            ctx.moveTo(pos.x, pos.y - r);
+            ctx.lineTo(pos.x + r, pos.y);
+            ctx.lineTo(pos.x, pos.y + r);
+            ctx.lineTo(pos.x - r, pos.y);
+            ctx.closePath();
+        } else if (ntype === 'database') {
+            // Rounded rectangle
+            var hw = r;
+            var hh = r;
+            var cr = r * 0.15;
+            var x0 = pos.x - hw, y0 = pos.y - hh;
+            var w = hw * 2, h = hh * 2;
+            ctx.moveTo(x0 + cr, y0);
+            ctx.lineTo(x0 + w - cr, y0);
+            ctx.quadraticCurveTo(x0 + w, y0, x0 + w, y0 + cr);
+            ctx.lineTo(x0 + w, y0 + h - cr);
+            ctx.quadraticCurveTo(x0 + w, y0 + h, x0 + w - cr, y0 + h);
+            ctx.lineTo(x0 + cr, y0 + h);
+            ctx.quadraticCurveTo(x0, y0 + h, x0, y0 + h - cr);
+            ctx.lineTo(x0, y0 + cr);
+            ctx.quadraticCurveTo(x0, y0, x0 + cr, y0);
+            ctx.closePath();
+        } else {
+            // Circle
+            ctx.arc(pos.x, pos.y, r, 0, 2 * Math.PI);
+        }
+
+        ctx.strokeStyle = 'rgba(41,181,232,0.7)';
+        ctx.lineWidth = 3;
+        ctx.shadowColor = 'rgba(41,181,232,0.8)';
+        ctx.shadowBlur = 25;
+        ctx.stroke();
+        ctx.shadowBlur = 45;
+        ctx.shadowColor = 'rgba(41,181,232,0.4)';
+        ctx.stroke();
+        ctx.restore();
+    });
 
     network.on('hoverNode', function(params) {
         var nodeData = nodes.get(params.node);
@@ -953,6 +1030,7 @@ def render_network(df: pd.DataFrame, _node_images: Dict[str, str],
                 "size": int(db_size), "color": transparent, "shape": "image",
                 "shapeProperties": shape_props, "borderWidth": 0,
                 "image": _node_images["database"],
+                "nodeType": "database",
             })
             added_nodes.add(database)
 
@@ -978,6 +1056,7 @@ def render_network(df: pd.DataFrame, _node_images: Dict[str, str],
                 "size": int(cl_size), "color": transparent, "shape": "image",
                 "shapeProperties": shape_props, "borderWidth": 0,
                 "image": client_icon,
+                "nodeType": "client",
             })
             added_nodes.add(client)
 
@@ -1042,6 +1121,10 @@ def render_network(df: pd.DataFrame, _node_images: Dict[str, str],
         isolated_node = None
         st.session_state["isolated_node"] = None
 
+    # Build a plain {id: type} map so the JS glow handler can look up node
+    # types without relying on vis.js DataSet preserving custom properties.
+    node_type_map = {n["id"]: n["nodeType"] for n in nodes if "nodeType" in n}
+
     component_data = {
         "nodes": nodes,
         "edges": edges,
@@ -1050,6 +1133,7 @@ def render_network(df: pd.DataFrame, _node_images: Dict[str, str],
         "cluster_databases": cluster_databases,
         "isolated_node": isolated_node,
         "fullscreen": fullscreen,
+        "nodeTypeMap": node_type_map,
     }
 
     mount = _get_component()
