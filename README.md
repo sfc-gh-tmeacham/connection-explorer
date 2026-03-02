@@ -1,6 +1,11 @@
 # Data Lake Explorer
 
-**Full visibility into your Snowflake data access** — A Streamlit application that visualizes database and warehouse access patterns using interactive network graphs powered by Snowflake Horizon Catalog.
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue?logo=python&logoColor=white)](https://www.python.org/)
+[![Streamlit](https://img.shields.io/badge/Streamlit-1.54-FF4B4B?logo=streamlit&logoColor=white)](https://streamlit.io/)
+[![Snowflake](https://img.shields.io/badge/Snowflake-29B5E8?logo=snowflake&logoColor=white)](https://www.snowflake.com/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
+**Full visibility into your Snowflake data access** — A Streamlit application that visualizes database, warehouse, and client application access patterns using interactive network graphs powered by Snowflake Horizon Catalog.
 
 ![Snowflake](static/snowflake-bug-logo.png)
 
