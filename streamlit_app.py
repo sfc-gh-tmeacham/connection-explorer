@@ -64,15 +64,27 @@ def sidebar_filters(df):
         ("direction", "DIRECTION", "Statement Type"),
     ]
 
+    def _sync_filter(persist_key: str, widget_key: str):
+        """on_change callback: copy the widget value to the persist key."""
+        st.session_state[persist_key] = st.session_state[widget_key]
+
     values = {}
     for name, col, label in filter_configs:
         options = get_distinct_values(df, col)
-        persist_key, widget_key = f"persist_filter_{name}", f"widget_filter_{name}"
+        persist_key = f"persist_filter_{name}"
+        widget_key = f"widget_filter_{name}"
+
         persisted = st.session_state.get(persist_key, [])
         if isinstance(persisted, str):
             persisted = [persisted] if persisted else []
         default_vals = [v for v in persisted if v in options]
-        values[name] = st.sidebar.multiselect(label, options, default=default_vals, key=widget_key)
+
+        values[name] = st.sidebar.multiselect(
+            label, options, default=default_vals,
+            key=widget_key,
+            on_change=_sync_filter,
+            args=(persist_key, widget_key),
+        )
         st.session_state[persist_key] = values[name]
 
     if "widget_filter_access_count" not in st.session_state:

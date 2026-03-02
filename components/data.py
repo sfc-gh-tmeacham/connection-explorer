@@ -347,7 +347,6 @@ def process_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-@st.cache_data(show_spinner=False)
 def apply_filters(
     df: pd.DataFrame,
     database_names: Sequence[str],

@@ -118,22 +118,53 @@ Even if you delete a widget key and call `st.rerun()`, the frontend widget may r
 
 ## Architecture Patterns
 
+### Never pre-set a widget key via the Session State API in the script body
+
+Setting `st.session_state[widget_key] = value` in the script body before calling
+the widget (e.g., `st.multiselect(..., key=widget_key)`) causes a conflict on
+the very first user interaction. Streamlit warns:
+
+> "The widget with key 'X' was created with a default value but also had its
+> value set via the Session State API."
+
+Even without `default`, pre-setting the widget key in the script body and then
+calling the widget causes the first interaction to be silently discarded.
+Conditional guards (`if key not in st.session_state`) don't help because after
+the first render the key always exists.
+
+The **only** safe places to write to a widget key are:
+1. **In a callback** (`on_change` or BidiComponent `on_<key>_change`) — callbacks
+   run before widgets are instantiated.
+2. **Never in the script body** before the widget command.
+
 ### Dual-key pattern for widget persistence across pages
 
 Use two keys per filter to survive page navigation:
 
 - `persist_filter_<name>`: Stores the intended value, never tied to a widget
-- `widget_filter_<name>`: The actual widget key, may be absent on other pages
+- `widget_filter_<name>`: The actual widget key, only written by the widget itself
 
-On the page with the widget:
+The correct pattern uses `default=` sourced from the persist key, plus an
+`on_change` callback to sync the widget value back to the persist key:
+
 ```python
+def _sync_filter(persist_key, widget_key):
+    st.session_state[persist_key] = st.session_state[widget_key]
+
 persisted = st.session_state.get(persist_key, [])
 default_vals = [v for v in persisted if v in options]
-values[name] = st.sidebar.multiselect(label, options, default=default_vals, key=widget_key)
+
+values[name] = st.sidebar.multiselect(
+    label, options, default=default_vals,
+    key=widget_key,
+    on_change=_sync_filter,
+    args=(persist_key, widget_key),
+)
 st.session_state[persist_key] = values[name]
 ```
 
-When programmatically updating filters (e.g., from a click callback), set **both** keys:
+When programmatically updating filters (e.g., from a click callback that runs
+before widget instantiation), set **both** keys:
 ```python
 st.session_state[persist_key] = new_val
 st.session_state[widget_key] = new_val
