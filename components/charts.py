@@ -1,9 +1,9 @@
-"""Plotly charts: bar charts, heatmap, treemap, read/write donuts, and Sankey diagrams.
+"""Plotly charts: bar charts, heatmap, treemap, and Sankey diagrams.
 
 Renders interactive visualizations below the network graph: horizontal
 bar charts for top databases, warehouses, and clients by access count,
-a Client x Database heatmap, a hierarchical treemap, per-database
-read/write ratio donuts, and read/write Sankey flow diagrams.
+a Client x Database heatmap, a hierarchical treemap, and read/write
+Sankey flow diagrams.
 """
 
 import logging
@@ -13,8 +13,6 @@ import plotly.graph_objects as go
 import streamlit as st
 
 logger = logging.getLogger(__name__)
-
-from plotly.subplots import make_subplots
 
 from components.theme import SNOWFLAKE_BLUE, STAR_BLUE, AMBER, READ_GREEN, is_dark_theme
 
@@ -144,9 +142,9 @@ def _build_bar_chart(
 def _build_sankey(df: pd.DataFrame, direction: str) -> go.Figure | None:
     """Build a Sankey flow diagram for a single data-flow direction.
 
-    For writes, flows run client (left) to database (right).  For reads,
-    flows run database (left) to client (right).  Nodes on each side are
-    sorted by total volume descending.
+    Both read and write flows are laid out with clients on the left and
+    databases on the right.  Nodes on each side are sorted by total
+    volume descending.
 
     Args:
         df: The filtered access DataFrame (all directions included; this
@@ -167,13 +165,8 @@ def _build_sankey(df: pd.DataFrame, direction: str) -> go.Figure | None:
         .sort_values("ACCESS_COUNT", ascending=False)
     )
 
-    # Sort source nodes (left side) by total volume descending.
-    # Writes: clients on left → databases on right
-    # Reads:  databases on left → clients on right
-    if direction == "write":
-        left_col, right_col = "CLIENT", "DATABASE"
-    else:
-        left_col, right_col = "DATABASE", "CLIENT"
+    # Both directions: clients on left, databases on right
+    left_col, right_col = "CLIENT", "DATABASE"
 
     left_totals = flows.groupby(left_col)["ACCESS_COUNT"].sum().sort_values(ascending=False)
     right_totals = flows.groupby(right_col)["ACCESS_COUNT"].sum().sort_values(ascending=False)
@@ -183,6 +176,51 @@ def _build_sankey(df: pd.DataFrame, direction: str) -> go.Figure | None:
     labels = left_nodes + right_nodes
     left_idx = {name: i for i, name in enumerate(left_nodes)}
     right_idx = {name: i + len(left_nodes) for i, name in enumerate(right_nodes)}
+
+    # Compute fixed x/y positions so Plotly preserves our sort order
+    # (greatest flow at top, least at bottom).  Positions are
+    # proportional to each node's flow volume so that tall bars don't
+    # overlap — each node's y centre is placed after enough room for
+    # all preceding nodes plus uniform gap padding.
+    n_left = len(left_nodes)
+    n_right = len(right_nodes)
+
+    def _flow_weighted_positions(totals: "pd.Series", n: int) -> list[float]:
+        """Return y-positions weighted by flow so tall bars get more room."""
+        if n == 0:
+            return []
+        if n == 1:
+            return [0.5]
+        vals = [totals.iloc[i] for i in range(n)]
+        total_flow = sum(vals)
+        # Each node occupies space proportional to its flow share, plus
+        # a fixed gap.  We reserve 15% of the range for gaps (split
+        # among n-1 inter-node gaps) and 85% for bars.
+        gap_share = 0.15
+        bar_share = 1.0 - gap_share
+        gap = gap_share / (n - 1) if n > 1 else 0
+        positions: list[float] = []
+        cursor = 0.01  # start just inside the range
+        usable = 0.98  # total y-range we can use (0.01 .. 0.99)
+        for i, v in enumerate(vals):
+            bar_height = (v / total_flow) * bar_share * usable if total_flow else 0
+            y_centre = cursor + bar_height / 2
+            positions.append(min(y_centre, 0.99))
+            cursor += bar_height + gap * usable
+        return positions
+
+    node_x: list[float] = []
+    node_y: list[float] = []
+
+    left_positions = _flow_weighted_positions(left_totals, n_left)
+    for i in range(n_left):
+        node_x.append(0.001)  # left column (avoid exact 0)
+        node_y.append(left_positions[i])
+
+    right_positions = _flow_weighted_positions(right_totals, n_right)
+    for i in range(n_right):
+        node_x.append(0.999)  # right column (avoid exact 1)
+        node_y.append(right_positions[i])
 
     sources, targets, values = [], [], []
     for _, row in flows.iterrows():
@@ -199,15 +237,17 @@ def _build_sankey(df: pd.DataFrame, direction: str) -> go.Figure | None:
     else:
         link_color = "rgba(41, 181, 232, 0.35)"
         node_colors = [SNOWFLAKE_BLUE] * len(left_nodes) + [AMBER] * len(right_nodes)
-        title = "Read Flows — Database → Client"
+        title = "Read Flows — Client ← Database"
 
     fig = go.Figure(go.Sankey(
-        arrangement="snap",
+        arrangement="fixed",
         node=dict(
-            pad=12,
+            pad=20,
             thickness=18,
             label=labels,
             color=node_colors,
+            x=node_x,
+            y=node_y,
             line=dict(width=0),
         ),
         link=dict(
@@ -217,6 +257,10 @@ def _build_sankey(df: pd.DataFrame, direction: str) -> go.Figure | None:
             color=[link_color] * len(values),
         ),
     ))
+
+    # Scale height so each node gets ~35px of vertical space minimum
+    n_max = max(n_left, n_right)
+    chart_height = max(600, n_max * 35 + 100)
 
     fig.update_layout(
         title=dict(
@@ -229,7 +273,7 @@ def _build_sankey(df: pd.DataFrame, direction: str) -> go.Figure | None:
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
         margin=dict(l=20, r=20, t=50, b=20),
-        height=600,
+        height=chart_height,
     )
     return fig
 
@@ -436,88 +480,6 @@ def _build_treemap(df: pd.DataFrame) -> go.Figure | None:
     return fig
 
 
-def _build_rw_donuts(df: pd.DataFrame) -> go.Figure | None:
-    """Build read/write ratio donut charts for the top databases.
-
-    Shows up to 6 databases in a 2x3 grid of donut charts, each showing
-    the proportion of read vs write access.
-
-    Args:
-        df: The filtered access DataFrame.
-
-    Returns:
-        A ``plotly.graph_objects.Figure``, or ``None`` if *df* is empty
-        or no databases have both read and write activity.
-    """
-    if df.empty:
-        return None
-
-    # Classify directions
-    df_copy = df.copy()
-    df_copy["RW"] = df_copy["DIRECTION"].apply(
-        lambda d: "Write" if d in ("write", "DML", "DDL") else "Read"
-    )
-
-    rw_agg = (
-        df_copy.groupby(["DATABASE", "RW"], as_index=False)["ACCESS_COUNT"]
-        .sum()
-    )
-
-    # Pick top 6 databases by total access
-    db_totals = rw_agg.groupby("DATABASE")["ACCESS_COUNT"].sum().nlargest(6)
-    top_dbs = db_totals.index.tolist()
-
-    if not top_dbs:
-        return None
-
-    n = len(top_dbs)
-    ncols = min(n, 3)
-    nrows = (n + ncols - 1) // ncols
-
-    fig = make_subplots(
-        rows=nrows, cols=ncols,
-        specs=[[{"type": "pie"}] * ncols for _ in range(nrows)],
-        subplot_titles=top_dbs,
-    )
-
-    for i, db in enumerate(top_dbs):
-        row = i // ncols + 1
-        col = i % ncols + 1
-        db_data = rw_agg[rw_agg["DATABASE"] == db]
-
-        rw_labels = db_data["RW"].tolist()
-        rw_values = db_data["ACCESS_COUNT"].tolist()
-        rw_colors = [READ_GREEN if lbl == "Read" else AMBER for lbl in rw_labels]
-
-        fig.add_trace(
-            go.Pie(
-                labels=rw_labels,
-                values=rw_values,
-                hole=0.5,
-                marker=dict(colors=rw_colors),
-                textinfo="percent",
-                hovertemplate="<b>%{label}</b><br>Access Count: %{value:,}<br>%{percent}<extra></extra>",
-                showlegend=(i == 0),
-            ),
-            row=row, col=col,
-        )
-
-    fig.update_layout(
-        title=dict(
-            text="Read / Write Ratio by Database",
-            font=dict(family="Lato, Arial, sans-serif", size=16),
-            x=0.5,
-            xanchor="center",
-        ),
-        font=dict(family="Lato, Arial, sans-serif", size=12),
-        paper_bgcolor="rgba(0,0,0,0)",
-        margin=dict(l=10, r=10, t=80, b=10),
-        height=300 * nrows + 80,
-        legend=dict(orientation="h", yanchor="bottom", y=-0.05, xanchor="center", x=0.5),
-    )
-    return fig
-
-
 def render_bar_charts(df: pd.DataFrame) -> None:
     """Render all charts below the network graph.
 
@@ -525,8 +487,7 @@ def render_bar_charts(df: pd.DataFrame) -> None:
     1. Bar charts — Client and Database side-by-side, Warehouse full-width
     2. Heatmap — Client x Database access intensity (full-width)
     3. Treemap — Hierarchical access distribution (full-width)
-    4. Read/Write donuts — Per-database ratio (3-column grid)
-    5. Sankey diagrams — Read and Write flows side-by-side
+    4. Sankey diagrams — Read and Write flows side-by-side
 
     Adapts bar and grid colors to the current Streamlit theme.
 
@@ -567,11 +528,6 @@ def render_bar_charts(df: pd.DataFrame) -> None:
 
     # Treemap
     fig = _build_treemap(df)
-    if fig:
-        st.plotly_chart(fig, width="stretch")
-
-    # Read/Write donuts
-    fig = _build_rw_donuts(df)
     if fig:
         st.plotly_chart(fig, width="stretch")
 
