@@ -19,7 +19,7 @@ This repository is published **as-is** for reference and reuse.
 - **SVG Client Icons**: Automatically displays branded icons for 60+ recognized client applications (Tableau, Power BI, Databricks, dbt, etc.)
 - **Click-to-Filter**: Click any node to add it to the sidebar filters (additive); click empty canvas to clear all filters
 - **Cluster Databases**: Group database nodes into a single cluster to simplify the view
-- **Hide Warehouses**: Toggle warehouse nodes on/off (hidden by default) for a cleaner Client → Database view
+- **Hide Node Types**: Toggle warehouses (hidden by default), clients, or databases on/off — at most one type can be hidden to ensure edges remain meaningful
 - **Full Screen Mode**: Expand the network graph to fill the browser window
 - **Save PNG**: Export a high-resolution (4096px+) PNG of the network graph with readable labels
 

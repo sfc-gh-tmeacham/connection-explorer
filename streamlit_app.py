@@ -88,7 +88,7 @@ def sidebar_filters(df):
         st.session_state[persist_key] = values[name]
 
     if "widget_filter_access_count" not in st.session_state:
-        st.session_state["widget_filter_access_count"] = st.session_state.get("persist_filter_access_count", 1)
+        st.session_state["widget_filter_access_count"] = st.session_state.get("persist_filter_access_count", 100)
     access_count = st.sidebar.number_input("Access Count Limit", min_value=1, max_value=1_000_000,
                                            step=10, key="widget_filter_access_count",
                                            help="Please enter a number between 1 and 1,000,000")
@@ -122,7 +122,7 @@ def main():
         "persist_filter_client": [],
         "persist_filter_org": "",
         "persist_filter_direction": [],
-        "persist_filter_access_count": 1,
+        "persist_filter_access_count": 100,
         "persist_filter_row_limit": 500,
     }
     for key, default in filter_defaults.items():
@@ -224,7 +224,7 @@ def main():
             client_names=tuple(st.session_state.get("persist_filter_client", []) or []),
             org_filter=st.session_state.get("persist_filter_org", ""),
             direction_filters=tuple(st.session_state.get("persist_filter_direction", []) or []),
-            access_count=st.session_state.get("persist_filter_access_count", 1),
+            access_count=st.session_state.get("persist_filter_access_count", 100),
         )
         row_limit = st.session_state.get("persist_filter_row_limit", 500)
         if len(filtered_df) > row_limit:
@@ -232,8 +232,10 @@ def main():
 
         node_images = load_node_images()
         hide_wh = st.session_state.get("hide_warehouses", True)
+        hide_cl = st.session_state.get("hide_clients", False)
+        hide_db = st.session_state.get("hide_databases", False)
         cluster_db = st.session_state.get("cluster_databases", False)
-        render_network(filtered_df, node_images, session, fullscreen=True, hide_warehouses=hide_wh, cluster_databases=cluster_db)
+        render_network(filtered_df, node_images, session, fullscreen=True, hide_warehouses=hide_wh, hide_clients=hide_cl, hide_databases=hide_db, cluster_databases=cluster_db)
         return
 
     # --- Normal mode ---

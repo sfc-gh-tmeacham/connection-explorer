@@ -999,6 +999,8 @@ def _get_component():
 def render_network(df: pd.DataFrame, _node_images: Dict[str, str],
                    session, fullscreen: bool = False,
                    hide_warehouses: bool = False,
+                   hide_clients: bool = False,
+                   hide_databases: bool = False,
                    cluster_databases: bool = False):
     """Build and render the interactive network graph as a v2 component.
 
@@ -1020,6 +1022,10 @@ def render_network(df: pd.DataFrame, _node_images: Dict[str, str],
             viewport height.
         hide_warehouses: If ``True``, warehouse nodes are omitted and
             edges connect clients directly to databases.
+        hide_clients: If ``True``, client nodes are omitted and edges
+            connect warehouses directly to databases.
+        hide_databases: If ``True``, database nodes are omitted and
+            edges connect clients directly to warehouses.
         cluster_databases: If ``True``, database nodes are automatically
             grouped into vis.js clusters on load based on naming rules.
 
@@ -1065,7 +1071,7 @@ def render_network(df: pd.DataFrame, _node_images: Dict[str, str],
         client = row["CLIENT"]
 
         # Add nodes (deduplicated)
-        if database not in added_nodes:
+        if not hide_databases and database not in added_nodes:
             s = node_stats.get(database, {})
             db_size = _log_scale(s.get("total", 0), global_min, global_max, 80, 200)
             tooltip = _build_tooltip(database, "Database", s, org_name, current_account)
@@ -1096,7 +1102,7 @@ def render_network(df: pd.DataFrame, _node_images: Dict[str, str],
             })
             added_nodes.add(warehouse)
 
-        if client not in added_nodes:
+        if not hide_clients and client not in added_nodes:
             s = node_stats.get(client, {})
             cl_size = _log_scale(s.get("total", 0), global_min, global_max, 80, 200)
             tooltip = _build_tooltip(client, "Client", s, org_name, current_account)
@@ -1110,58 +1116,77 @@ def render_network(df: pd.DataFrame, _node_images: Dict[str, str],
             })
             added_nodes.add(client)
 
-        # Add edges
-        edge_color = AMBER if direction in ("write", "DML", "DDL") else READ_GREEN
+        # Add edges — direction determines arrow direction.
+        # When a node type is hidden, edges connect the two remaining types
+        # directly with a single edge instead of two hops.
+        is_write = direction in ("write", "DML", "DDL")
+        edge_color = AMBER if is_write else READ_GREEN
         dir_label = direction.upper() if direction else "READ"
-        edge_title = f"{client} → {warehouse} → {database}\nDirection: {dir_label}\nAccess Count: {ac:,}"
         path_idx = len(paths)
 
         if hide_warehouses:
+            # Client ↔ Database (skip warehouse)
             paths.append([client, client, database])
-            edge_title_direct = f"{client} → {database}\nDirection: {dir_label}\nWarehouse: {warehouse}\nAccess Count: {ac:,}"
-            # Direct edge: client ↔ database (skip warehouse)
-            if direction in ("write", "DML", "DDL"):
+            title = f"{client} → {database}\nDirection: {dir_label}\nWarehouse: {warehouse}\nAccess Count: {ac:,}"
+            src, dst = (client, database) if is_write else (database, client)
+            edges.append({
+                "id": f"e{len(edges)}", "from": src, "to": dst,
+                "value": ac, "color": edge_color, "arrows": "to",
+                "arrowStrikethrough": False, "title": title,
+                "pathIndex": path_idx,
+            })
+        elif hide_clients:
+            # Warehouse ↔ Database (skip client)
+            paths.append([warehouse, warehouse, database])
+            title = f"{warehouse} → {database}\nDirection: {dir_label}\nClient: {client}\nAccess Count: {ac:,}"
+            src, dst = (warehouse, database) if is_write else (database, warehouse)
+            edges.append({
+                "id": f"e{len(edges)}", "from": src, "to": dst,
+                "value": ac, "color": edge_color, "arrows": "to",
+                "arrowStrikethrough": False, "title": title,
+                "pathIndex": path_idx,
+            })
+        elif hide_databases:
+            # Client ↔ Warehouse (skip database)
+            paths.append([client, warehouse, warehouse])
+            title = f"{client} → {warehouse}\nDirection: {dir_label}\nDatabase: {database}\nAccess Count: {ac:,}"
+            src, dst = (client, warehouse) if is_write else (warehouse, client)
+            edges.append({
+                "id": f"e{len(edges)}", "from": src, "to": dst,
+                "value": ac, "color": edge_color, "arrows": "to",
+                "arrowStrikethrough": False, "title": title,
+                "pathIndex": path_idx,
+            })
+        else:
+            # All three node types visible — two edges per path
+            paths.append([client, warehouse, database])
+            edge_title = f"{client} → {warehouse} → {database}\nDirection: {dir_label}\nAccess Count: {ac:,}"
+            if is_write:
                 edges.append({
-                    "id": f"e{len(edges)}", "from": client, "to": database,
+                    "id": f"e{len(edges)}", "from": client, "to": warehouse,
                     "value": ac, "color": edge_color, "arrows": "to",
-                    "arrowStrikethrough": False, "title": edge_title_direct,
+                    "arrowStrikethrough": False, "title": edge_title,
+                    "pathIndex": path_idx,
+                })
+                edges.append({
+                    "id": f"e{len(edges)}", "from": warehouse, "to": database,
+                    "value": ac, "color": edge_color, "arrows": "to",
+                    "arrowStrikethrough": False, "title": edge_title,
                     "pathIndex": path_idx,
                 })
             else:
                 edges.append({
-                    "id": f"e{len(edges)}", "from": database, "to": client,
+                    "id": f"e{len(edges)}", "from": database, "to": warehouse,
                     "value": ac, "color": edge_color, "arrows": "to",
-                    "arrowStrikethrough": False, "title": edge_title_direct,
+                    "arrowStrikethrough": False, "title": edge_title,
                     "pathIndex": path_idx,
                 })
-        elif direction in ("write", "DML", "DDL"):
-            paths.append([client, warehouse, database])
-            edges.append({
-                "id": f"e{len(edges)}", "from": client, "to": warehouse,
-                "value": ac, "color": edge_color, "arrows": "to",
-                "arrowStrikethrough": False, "title": edge_title,
-                "pathIndex": path_idx,
-            })
-            edges.append({
-                "id": f"e{len(edges)}", "from": warehouse, "to": database,
-                "value": ac, "color": edge_color, "arrows": "to",
-                "arrowStrikethrough": False, "title": edge_title,
-                "pathIndex": path_idx,
-            })
-        else:
-            paths.append([client, warehouse, database])
-            edges.append({
-                "id": f"e{len(edges)}", "from": database, "to": warehouse,
-                "value": ac, "color": edge_color, "arrows": "to",
-                "arrowStrikethrough": False, "title": edge_title,
-                "pathIndex": path_idx,
-            })
-            edges.append({
-                "id": f"e{len(edges)}", "from": warehouse, "to": client,
-                "value": ac, "color": edge_color, "arrows": "to",
-                "arrowStrikethrough": False, "title": edge_title,
-                "pathIndex": path_idx,
-            })
+                edges.append({
+                    "id": f"e{len(edges)}", "from": warehouse, "to": client,
+                    "value": ac, "color": edge_color, "arrows": "to",
+                    "arrowStrikethrough": False, "title": edge_title,
+                    "pathIndex": path_idx,
+                })
 
     clusters = {label: members for label, members in cluster_members.items() if members}
 

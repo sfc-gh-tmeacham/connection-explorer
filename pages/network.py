@@ -15,17 +15,38 @@ def run():
     node_images = load_node_images()
     session = st.session_state.get("snowflake_session")
 
-    title_col, toggle_col, btn_col = st.columns([7, 2.5, 0.5])
+    title_col, toggle_col, btn_col = st.columns([5, 4.5, 0.5])
     with title_col:
         st.markdown(
             '<div style="padding-left: 50px;"><span class="network-title">Network Graph</span></div>',
             unsafe_allow_html=True,
         )
     with toggle_col:
-        tc1, tc2 = st.columns(2)
+        tc1, tc2, tc3, tc4 = st.columns(4)
+
+        # Read current hide states to enforce "at most 1 hidden" constraint.
+        # If one is already checked, the other two are disabled.
+        cur_hide_wh = st.session_state.get("hide_warehouses", True)
+        cur_hide_cl = st.session_state.get("hide_clients", False)
+        cur_hide_db = st.session_state.get("hide_databases", False)
+        one_hidden = cur_hide_wh or cur_hide_cl or cur_hide_db
+
         with tc1:
-            hide_wh = st.checkbox("Hide Warehouses", key="hide_warehouses", value=True)
+            hide_wh = st.checkbox(
+                "Hide Warehouses", key="hide_warehouses", value=True,
+                disabled=one_hidden and not cur_hide_wh,
+            )
         with tc2:
+            hide_cl = st.checkbox(
+                "Hide Clients", key="hide_clients",
+                disabled=one_hidden and not cur_hide_cl,
+            )
+        with tc3:
+            hide_db = st.checkbox(
+                "Hide Databases", key="hide_databases",
+                disabled=one_hidden and not cur_hide_db,
+            )
+        with tc4:
             cluster_db = st.checkbox("Cluster Databases", key="cluster_databases")
     with btn_col:
         st.markdown('<div class="fullscreen-btn-container"></div>', unsafe_allow_html=True)
@@ -35,5 +56,6 @@ def run():
 
     render_network(
         df, node_images, session,
-        fullscreen=False, hide_warehouses=hide_wh, cluster_databases=cluster_db,
+        fullscreen=False, hide_warehouses=hide_wh, hide_clients=hide_cl,
+        hide_databases=hide_db, cluster_databases=cluster_db,
     )
