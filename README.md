@@ -10,44 +10,54 @@ This repository is published **as-is** for reference and reuse.
 
 - **Support**: No support is provided.
 - **Issues / Discussions**: Not accepted.
-- **Pull requests**: Not accepted (please fork if you’d like to modify).
+- **Pull requests**: Not accepted (please fork if you'd like to modify).
 
 ## Features
 
-- **Interactive Network Visualization**: See how databases, warehouses, and client applications connect
+### Network Graph (Home Page)
+- **Interactive vis.js Network**: Visualizes connections between databases, warehouses, and client applications with physics-based layout
+- **SVG Client Icons**: Automatically displays branded icons for 60+ recognized client applications (Tableau, Power BI, Databricks, dbt, etc.)
+- **Node Isolation**: Click any node to isolate it and see only its direct connections
+- **Cluster Databases**: Group database nodes into a single cluster to simplify the view
+- **Hide Warehouses**: Toggle warehouse nodes on/off (hidden by default) for a cleaner Client → Database view
+- **Full Screen Mode**: Expand the network graph to fill the browser window
+- **Save PNG**: Export a high-resolution (4096px+) PNG of the network graph with readable labels
+
+### Charts Page
+- **Stacked Bar Charts**: Top databases, warehouses, and clients by access count, split by read/write direction
+- **3-Column Sankey Diagrams**: Flow visualization of Client → Warehouse → Database access for reads and writes
+- **Client × Warehouse Heatmap**: Heat grid showing which clients use which warehouses
+- **Client × Database Heatmap**: Heat grid showing which clients access which databases
+- **Treemap**: Hierarchical view of access volume by database, warehouse, and client
+
+### General
+- **Multi-Page Navigation**: Separate pages for the network graph and charts, with top-of-page navigation
 - **Real-time Data**: Pulls from Snowflake's `account_usage` views via Horizon Catalog
-- **Smart Client Detection**: Automatically identifies 50+ application types (Tableau, Power BI, Databricks, etc.)
-- **Flexible Filtering**: Filter by database, warehouse, client, organization, and access direction
+- **Smart Client Detection**: Automatically identifies 60+ application types
+- **Flexible Filtering**: Filter by database, warehouse, client, organization, direction, and access count
 - **Theme Support**: Adapts to Streamlit's light and dark themes
 - **Sample Data Mode**: Works locally without Snowflake connection for demos
-
-## Screenshots
-
-The app displays:
-- **Network Graph**: Interactive visualization showing data flow between databases and warehouses
-- **Bar Charts**: Access counts by client, database, and warehouse
 
 ## Prerequisites
 
 - Python 3.11+
-- Snowflake account (optional - sample data available for demos)
+- [uv](https://docs.astral.sh/uv/) (recommended) or conda
+- Snowflake account (optional — sample data available for demos)
 
 ## Installation
 
-### Option 1: Using pip
+### Option 1: Using uv (Recommended)
 
 ```bash
 # Clone the repository
 git clone https://github.com/sfc-gh-mfulkerson/data-lake-explorer.git
 cd data-lake-explorer
 
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
+# Install dependencies and run
+uv run streamlit run streamlit_app.py
 ```
+
+`uv` will automatically create a virtual environment and install all dependencies from `pyproject.toml`.
 
 ### Option 2: Using conda
 
@@ -64,6 +74,10 @@ conda activate streamlit-data-lake-explorer
 ## Running Locally
 
 ```bash
+# With uv
+uv run streamlit run streamlit_app.py
+
+# With conda (after activating the environment)
 streamlit run streamlit_app.py
 ```
 
@@ -190,20 +204,28 @@ This will remove:
 
 ```
 data-lake-explorer/
-├── streamlit_app.py          # Main Streamlit application
-├── snowflake_data_set_up.sql # Database/schema/task setup script
-├── deploy.sh                 # Deployment script (Mac/Linux)
-├── deploy.bat                # Deployment script (Windows)
-├── uninstall.sh              # Uninstall script (Mac/Linux)
-├── uninstall.bat             # Uninstall script (Windows)
-├── snowflake.yml             # Snowflake CLI deployment config
-├── static/                   # Static assets (images)
-│   ├── snowflake-bug-logo.png
-│   ├── snowflake-database.png
-│   ├── snowflake-warehouse.png
-│   └── ...
-├── requirements.txt          # pip dependencies
-├── environment.yml           # conda environment
+├── streamlit_app.py              # Main app entry point and multi-page router
+├── pages/                        # Streamlit pages
+│   ├── network.py                # Network graph page
+│   └── charts.py                 # Charts page (bars, Sankey, heatmaps, treemap)
+├── components/                   # Shared components and logic
+│   ├── network.py                # vis.js network rendering (inline HTML/JS)
+│   ├── charts.py                 # Plotly chart builders
+│   ├── data.py                   # Data loading and filtering
+│   ├── assets.py                 # SVG icon loading and encoding
+│   ├── client_mappings.py        # Client application detection rules
+│   ├── theme.py                  # Snowflake brand colors and theme helpers
+│   └── setup.py                  # Snowflake connection setup
+├── static/                       # Static assets
+│   ├── client-icons/             # 60+ branded SVG client icons
+│   ├── snowflake-database.svg    # Database node icon
+│   ├── snowflake-warehouse.svg   # Warehouse node icon
+│   └── snowflake-bug-logo.*      # Snowflake logo
+├── snowflake_data_set_up.sql     # Database/schema/task setup script
+├── snowflake.yml                 # Snowflake CLI deployment config
+├── pyproject.toml                # Python project config and dependencies
+├── deploy.sh / deploy.bat        # Deployment scripts
+├── uninstall.sh / uninstall.bat  # Uninstall scripts
 └── README.md
 ```
 
@@ -235,7 +257,7 @@ The refresh task pre-aggregates this data into `SNOWFLAKE_DATA_LAKE.DATA_LAKE_AC
 
 ### Client Application Mappings
 
-The app automatically recognizes 50+ client applications including:
+The app automatically recognizes 60+ client applications including:
 - BI Tools: Tableau, Power BI, MicroStrategy, Domo
 - ETL/ELT: Databricks, Airflow, Azure Data Factory, Alteryx
 - Development: Python, JDBC, DBeaver, VSCode
@@ -248,7 +270,7 @@ See [LICENSE](LICENSE) file.
 ## Built With
 
 - [Streamlit](https://streamlit.io/) - The web framework
-- [PyVis](https://pyvis.readthedocs.io/) - Network visualization
-- [Altair](https://altair-viz.github.io/) - Declarative charts
+- [vis.js](https://visjs.org/) - Interactive network graph visualization
+- [Plotly](https://plotly.com/python/) - Charts (bar, Sankey, heatmap, treemap)
 - [Snowpark for Python](https://docs.snowflake.com/en/developer-guide/snowpark/python/index) - Snowflake connectivity
 
