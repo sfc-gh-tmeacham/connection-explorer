@@ -70,12 +70,17 @@ CUSTOM_CSS = """
         .stMainBlockContainer {
             padding: 0.5rem 1rem 0rem;
         }
+        /* Push content below st.navigation top nav bar */
+        .stApp > [data-testid="stAppViewBlockContainer"],
+        .stApp .stMainBlockContainer {
+            padding-top: 2.5rem !important;
+        }
         .stDivider {
             padding: 0rem;
             height: 0rem;
         }
         div.block-container {
-            padding-top: 0.5rem;
+            padding-top: 2.5rem;
         }
         .stSidebar > div {
             border-right: 2px solid var(--snowflake-blue);

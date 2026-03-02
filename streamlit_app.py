@@ -1,8 +1,7 @@
 """Data Lake Explorer — main Streamlit application entry point.
 
-Loads Snowflake access data, presents sidebar filters, and renders an
-interactive vis.js network graph with accompanying Plotly bar charts and
-Sankey diagrams.  Supports a fullscreen mode for the network graph.
+Loads Snowflake access data, presents sidebar filters, and routes between
+the Network Graph and Charts pages using st.navigation with top positioning.
 """
 
 import logging
@@ -16,7 +15,6 @@ logger = logging.getLogger(__name__)
 import streamlit as st
 
 from components.assets import FAVICON_PATH, load_node_images, render_snowflake_header
-from components.charts import render_bar_charts
 from components.data import apply_filters, get_distinct_values, load_data, process_dataframe
 from components.network import render_network
 from components.theme import CUSTOM_CSS
@@ -104,48 +102,8 @@ def sidebar_filters(df):
     return filtered_df.head(row_limit) if len(filtered_df) > row_limit else filtered_df
 
 
-def render_network_section(df, node_images, session_obj):
-    """Render the network graph section with a title bar and charts below.
-
-    Displays the section title, a "Hide Warehouses" toggle, and a
-    fullscreen button in a three-column layout, then mounts the vis.js
-    network component followed by the Plotly bar charts and Sankey
-    diagrams.
-
-    Args:
-        df: Filtered access DataFrame to visualize.
-        node_images: Dict of base-64 data-URI images keyed by node type.
-        session_obj: Active Snowflake session (or ``None``).
-    """
-    title_col, toggle_col, btn_col = st.columns([7, 2.5, 0.5])
-    with title_col:
-        st.markdown(
-            '<div style="padding-left: 50px;"><span class="network-title">Network Graph</span></div>',
-            unsafe_allow_html=True
-        )
-    with toggle_col:
-        tc1, tc2 = st.columns(2)
-        with tc1:
-            hide_wh = st.checkbox("Hide Warehouses", key="hide_warehouses")
-        with tc2:
-            cluster_db = st.checkbox("Cluster Databases", key="cluster_databases")
-    with btn_col:
-        st.markdown('<div class="fullscreen-btn-container"></div>', unsafe_allow_html=True)
-        if st.button("⛶", help="Full Screen"):
-            st.session_state["full_screen_mode"] = True
-            st.rerun()
-
-    render_network(df, node_images, session_obj, fullscreen=False, hide_warehouses=hide_wh, cluster_databases=cluster_db)
-    render_bar_charts(df)
-
-
 def main():
-    """Application entry point — orchestrates data loading, filtering, and rendering.
-
-    Initializes session-state defaults, checks for fullscreen mode, and
-    then either renders the fullscreen network view or the normal layout
-    (header, sidebar filters, network graph, and charts).
-    """
+    """Application entry point — orchestrates data loading, filtering, and routing."""
     filter_defaults = {
         "persist_filter_database": [],
         "persist_filter_warehouse": [],
@@ -172,6 +130,7 @@ def main():
     is_fullscreen = st.session_state.get("full_screen_mode", False)
     logger.info("App started — fullscreen=%s", is_fullscreen)
 
+    # --- Fullscreen mode bypasses navigation ---
     if is_fullscreen:
         st.markdown("""
             <style>
@@ -265,7 +224,7 @@ def main():
         render_network(filtered_df, node_images, session, fullscreen=True, hide_warehouses=hide_wh, cluster_databases=cluster_db)
         return
 
-    # Normal mode
+    # --- Normal mode ---
     st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
     col1, col2 = st.columns([6, 1])
@@ -276,14 +235,27 @@ def main():
             st.cache_data.clear()
             st.rerun()
 
+    # Load and filter data, store in session state for pages
     raw_df = load_data(session)
     processed_df = process_dataframe(raw_df)
     filtered_df = sidebar_filters(processed_df)
+    st.session_state["filtered_df"] = filtered_df
+    st.session_state["snowflake_session"] = session
 
-    node_images = load_node_images()
-
-    render_network_section(filtered_df, node_images, session)
     st.sidebar.markdown("Powered by Streamlit :streamlit:")
 
-if __name__ == "__main__":
-    main()
+    # --- Page navigation ---
+    from pages.network import run as network_page
+    from pages.charts import run as charts_page
+
+    pg = st.navigation(
+        [
+            st.Page(network_page, title="Network Graph", default=True, url_path="network"),
+            st.Page(charts_page, title="Charts", url_path="charts"),
+        ],
+        position="top",
+    )
+    pg.run()
+
+
+main()

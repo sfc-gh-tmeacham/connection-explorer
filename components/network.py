@@ -237,6 +237,45 @@ _COMPONENT_CSS = f"""
     height: 100vh;
 }}
 
+#loading-overlay {{
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: var(--st-background-color, #0e1117);
+    z-index: 200;
+    transition: opacity 0.4s ease;
+}}
+
+#loading-text {{
+    font-family: 'Lato', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 14px;
+    color: var(--st-text-color, #fafafa);
+    opacity: 0.7;
+    margin-bottom: 12px;
+}}
+
+#loading-bar-track {{
+    width: 200px;
+    height: 4px;
+    background: rgba(128,128,128,0.2);
+    border-radius: 2px;
+    overflow: hidden;
+}}
+
+#loading-bar-fill {{
+    width: 0%;
+    height: 100%;
+    background: #29B5E8;
+    border-radius: 2px;
+    transition: width 0.15s ease;
+}}
+
 div.vis-tooltip {{
     font-family: 'Lato', -apple-system, BlinkMacSystemFont, sans-serif !important;
     font-size: 12px !important;
@@ -340,6 +379,10 @@ div.vis-tooltip {{
 _COMPONENT_HTML = f"""
 <div class="vis-network-container">
     <div id="vis-canvas"></div>
+    <div id="loading-overlay">
+        <div id="loading-text">Building network…</div>
+        <div id="loading-bar-track"><div id="loading-bar-fill"></div></div>
+    </div>
     <div id="custom-tooltip"></div>
     <div id="graph-legend">
         <div class="legend-title">Edge Direction</div>
@@ -460,17 +503,45 @@ export default function(component) {
     const network = new vis.Network(container, { nodes, edges }, options);
     container._visNetwork = network;
 
+    // --- Loading progress bar ---
+    var loadingOverlay = container.parentElement.querySelector('#loading-overlay');
+    var loadingBarFill = container.parentElement.querySelector('#loading-bar-fill');
+
+    network.on('stabilizationProgress', function(params) {
+        var pct = Math.round((params.iterations / params.total) * 100);
+        if (loadingBarFill) loadingBarFill.style.width = pct + '%';
+    });
+
     // --- Disable physics after initial stabilization ---
     network.once('stabilizationIterationsDone', function() {
+        if (loadingBarFill) loadingBarFill.style.width = '100%';
+        if (loadingOverlay) {
+            loadingOverlay.style.opacity = '0';
+            setTimeout(function() { loadingOverlay.style.display = 'none'; }, 400);
+        }
         network.setOptions({ physics: { enabled: false } });
     });
 
     // --- Helper: re-enable physics briefly so nodes reorganize, then freeze ---
+    var stabilizing = false;
     function restabilize() {
+        stabilizing = true;
+        if (loadingOverlay) {
+            loadingOverlay.style.display = 'flex';
+            loadingOverlay.style.opacity = '1';
+        }
+        if (loadingBarFill) loadingBarFill.style.width = '0%';
+
         network.setOptions({ physics: { enabled: true } });
         network.once('stabilizationIterationsDone', function() {
+            if (loadingBarFill) loadingBarFill.style.width = '100%';
+            if (loadingOverlay) {
+                loadingOverlay.style.opacity = '0';
+                setTimeout(function() { loadingOverlay.style.display = 'none'; }, 400);
+            }
             network.setOptions({ physics: { enabled: false } });
             network.fit({ animation: { duration: 400, easingFunction: 'easeInOutQuad' } });
+            stabilizing = false;
         });
         network.stabilize();
     }
@@ -482,6 +553,7 @@ export default function(component) {
 
     // --- Click: isolate subgraph or restore full network ---
     network.on('click', function(params) {
+        if (stabilizing) return;
         if (params.nodes.length === 1) {
             const nodeId = params.nodes[0];
 
