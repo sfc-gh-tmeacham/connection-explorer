@@ -400,6 +400,7 @@ _COMPONENT_HTML = f"""
             <div style="font-size:11px; opacity:0.7;">Click canvas to restore</div>
         </div>
         <button class="legend-btn" id="resetClustersBtn" style="display:none;">Expand All</button>
+        <button class="legend-btn" id="downloadPngBtn">&#128247; Save PNG</button>
     </div>
 </div>
 """
@@ -471,6 +472,9 @@ export default function(component) {
                 size: 100,
                 color: textColor,
                 face: 'Lato, -apple-system, BlinkMacSystemFont, sans-serif',
+                strokeWidth: 4,
+                strokeColor: textColor === '#fafafa' || textColor === '#ffffff'
+                    ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.7)',
             },
         },
         edges: {
@@ -921,6 +925,91 @@ export default function(component) {
     }
 
     if (resetBtn) resetBtn.onclick = resetClusters;
+
+    // --- Download PNG button ---
+    const dlBtn = parentElement.querySelector('#downloadPngBtn');
+    if (dlBtn) {
+        dlBtn.onclick = function() {
+            // Strategy: temporarily enlarge the vis.js container so the
+            // canvas renders at high resolution natively, capture that
+            // frame, draw labels on top, then restore.
+            const container = parentElement.querySelector('#vis-canvas');
+            if (!container) return;
+
+            // Save original dimensions
+            const origCW = container.clientWidth;
+            const origCH = container.clientHeight;
+            const origW = container.style.width;
+            const origH = container.style.height;
+            const origPos = container.style.position;
+            const origOverflow = container.parentElement.style.overflow;
+            const origParentH = container.parentElement.style.height;
+
+            // Target: 4096 CSS-px on the long side
+            const aspect = origCW / (origCH || 1);
+            var bigW, bigH;
+            if (aspect >= 1) {
+                bigW = 4096; bigH = Math.round(4096 / aspect);
+            } else {
+                bigH = 4096; bigW = Math.round(4096 * aspect);
+            }
+
+            // Hide the resize from the user
+            container.parentElement.style.overflow = 'hidden';
+            container.parentElement.style.height = (origCH || 600) + 'px';
+            container.style.position = 'absolute';
+            container.style.width = bigW + 'px';
+            container.style.height = bigH + 'px';
+
+            // Resize vis.js canvas, then wait for layout + paint
+            network.setSize(bigW + 'px', bigH + 'px');
+            network.fit();
+
+            // Use setTimeout to let the browser finish layout, then
+            // register the capture listener and trigger a fresh redraw.
+            setTimeout(function() {
+                var exported = false;
+                network.once('afterDrawing', function(canvasCtx) {
+                    if (exported) return;
+                    exported = true;
+
+                    try {
+                        const srcCanvas = canvasCtx.canvas;
+                        const pixW = srcCanvas.width;
+                        const pixH = srcCanvas.height;
+                        const ratio = pixW / bigW;
+
+                        const exportCanvas = document.createElement('canvas');
+                        exportCanvas.width = pixW;
+                        exportCanvas.height = pixH;
+                        const ctx = exportCanvas.getContext('2d');
+                        ctx.drawImage(srcCanvas, 0, 0);
+
+                        // Trigger download
+                        var link = document.createElement('a');
+                        link.download = 'data-lake-network.png';
+                        link.href = exportCanvas.toDataURL('image/png');
+                        link.click();
+                    } catch(e) {
+                        console.error('PNG export failed:', e);
+                    }
+
+                    // Restore original container size
+                    container.style.width = origW;
+                    container.style.height = origH;
+                    container.style.position = origPos;
+                    container.parentElement.style.overflow = origOverflow;
+                    container.parentElement.style.height = origParentH;
+                    network.setSize((origCW || 800) + 'px', (origCH || 600) + 'px');
+                    network.redraw();
+                    network.fit();
+                });
+
+                // Now trigger the redraw that the listener will capture
+                network.redraw();
+            }, 300);
+        };
+    }
 
     // Auto-cluster on load when checkbox is checked
     if (data.cluster_databases) {
