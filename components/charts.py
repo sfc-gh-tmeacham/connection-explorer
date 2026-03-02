@@ -2,8 +2,8 @@
 
 Renders interactive visualizations below the network graph: horizontal
 bar charts for top databases, warehouses, and clients by access count,
-a Client x Database heatmap, a hierarchical treemap, and read/write
-Sankey flow diagrams.
+a Client x Database heatmap, a hierarchical treemap, and three-column
+Sankey flow diagrams (Client → Warehouse → Database).
 """
 
 import logging
@@ -14,7 +14,7 @@ import streamlit as st
 
 logger = logging.getLogger(__name__)
 
-from components.theme import SNOWFLAKE_BLUE, STAR_BLUE, AMBER, READ_GREEN, is_dark_theme
+from components.theme import SNOWFLAKE_BLUE, STAR_BLUE, AMBER, MID_BLUE, READ_GREEN, is_dark_theme
 
 
 @st.cache_data(show_spinner=False)
@@ -140,11 +140,10 @@ def _build_bar_chart(
 
 
 def _build_sankey(df: pd.DataFrame, direction: str) -> go.Figure | None:
-    """Build a Sankey flow diagram for a single data-flow direction.
+    """Build a 3-column Sankey: Client → Warehouse → Database.
 
-    Both read and write flows are laid out with clients on the left and
-    databases on the right.  Nodes on each side are sorted by total
-    volume descending.
+    Nodes in each column are sorted by total volume descending, with
+    flow-weighted y-positions so tall bars don't overlap.
 
     Args:
         df: The filtered access DataFrame (all directions included; this
@@ -159,32 +158,40 @@ def _build_sankey(df: pd.DataFrame, direction: str) -> go.Figure | None:
     if subset.empty:
         return None
 
+    # Aggregate by the full path: client → warehouse → database
     flows = (
-        subset.groupby(["CLIENT", "DATABASE"], as_index=False)["ACCESS_COUNT"]
+        subset.groupby(["CLIENT", "WAREHOUSE", "DATABASE"], as_index=False)[
+            "ACCESS_COUNT"
+        ]
         .sum()
         .sort_values("ACCESS_COUNT", ascending=False)
     )
 
-    # Both directions: clients on left, databases on right
-    left_col, right_col = "CLIENT", "DATABASE"
+    # Totals per column, sorted descending
+    client_totals = (
+        flows.groupby("CLIENT")["ACCESS_COUNT"].sum().sort_values(ascending=False)
+    )
+    wh_totals = (
+        flows.groupby("WAREHOUSE")["ACCESS_COUNT"].sum().sort_values(ascending=False)
+    )
+    db_totals = (
+        flows.groupby("DATABASE")["ACCESS_COUNT"].sum().sort_values(ascending=False)
+    )
 
-    left_totals = flows.groupby(left_col)["ACCESS_COUNT"].sum().sort_values(ascending=False)
-    right_totals = flows.groupby(right_col)["ACCESS_COUNT"].sum().sort_values(ascending=False)
-    left_nodes = left_totals.index.tolist()
-    right_nodes = right_totals.index.tolist()
+    client_nodes = client_totals.index.tolist()
+    wh_nodes = wh_totals.index.tolist()
+    db_nodes = db_totals.index.tolist()
 
-    labels = left_nodes + right_nodes
-    left_idx = {name: i for i, name in enumerate(left_nodes)}
-    right_idx = {name: i + len(left_nodes) for i, name in enumerate(right_nodes)}
+    labels = client_nodes + wh_nodes + db_nodes
+    n_clients = len(client_nodes)
+    n_wh = len(wh_nodes)
+    n_db = len(db_nodes)
 
-    # Compute fixed x/y positions so Plotly preserves our sort order
-    # (greatest flow at top, least at bottom).  Positions are
-    # proportional to each node's flow volume so that tall bars don't
-    # overlap — each node's y centre is placed after enough room for
-    # all preceding nodes plus uniform gap padding.
-    n_left = len(left_nodes)
-    n_right = len(right_nodes)
+    client_idx = {name: i for i, name in enumerate(client_nodes)}
+    wh_idx = {name: i + n_clients for i, name in enumerate(wh_nodes)}
+    db_idx = {name: i + n_clients + n_wh for i, name in enumerate(db_nodes)}
 
+    # ── flow-weighted y-positions ────────────────────────────────
     def _flow_weighted_positions(totals: "pd.Series", n: int) -> list[float]:
         """Return y-positions weighted by flow so tall bars get more room."""
         if n == 0:
@@ -193,16 +200,13 @@ def _build_sankey(df: pd.DataFrame, direction: str) -> go.Figure | None:
             return [0.5]
         vals = [totals.iloc[i] for i in range(n)]
         total_flow = sum(vals)
-        # Each node occupies space proportional to its flow share, plus
-        # a fixed gap.  We reserve 15% of the range for gaps (split
-        # among n-1 inter-node gaps) and 85% for bars.
         gap_share = 0.15
         bar_share = 1.0 - gap_share
         gap = gap_share / (n - 1) if n > 1 else 0
         positions: list[float] = []
-        cursor = 0.01  # start just inside the range
-        usable = 0.98  # total y-range we can use (0.01 .. 0.99)
-        for i, v in enumerate(vals):
+        cursor = 0.01
+        usable = 0.98
+        for _i, v in enumerate(vals):
             bar_height = (v / total_flow) * bar_share * usable if total_flow else 0
             y_centre = cursor + bar_height / 2
             positions.append(min(y_centre, 0.99))
@@ -212,54 +216,83 @@ def _build_sankey(df: pd.DataFrame, direction: str) -> go.Figure | None:
     node_x: list[float] = []
     node_y: list[float] = []
 
-    left_positions = _flow_weighted_positions(left_totals, n_left)
-    for i in range(n_left):
-        node_x.append(0.001)  # left column (avoid exact 0)
-        node_y.append(left_positions[i])
+    for pos in _flow_weighted_positions(client_totals, n_clients):
+        node_x.append(0.001)
+        node_y.append(pos)
+    for pos in _flow_weighted_positions(wh_totals, n_wh):
+        node_x.append(0.5)
+        node_y.append(pos)
+    for pos in _flow_weighted_positions(db_totals, n_db):
+        node_x.append(0.999)
+        node_y.append(pos)
 
-    right_positions = _flow_weighted_positions(right_totals, n_right)
-    for i in range(n_right):
-        node_x.append(0.999)  # right column (avoid exact 1)
-        node_y.append(right_positions[i])
+    # ── links: client→warehouse and warehouse→database ──────────
+    cw_flows = flows.groupby(["CLIENT", "WAREHOUSE"], as_index=False)[
+        "ACCESS_COUNT"
+    ].sum()
+    wd_flows = flows.groupby(["WAREHOUSE", "DATABASE"], as_index=False)[
+        "ACCESS_COUNT"
+    ].sum()
 
-    sources, targets, values = [], [], []
-    for _, row in flows.iterrows():
-        li = left_idx[row[left_col]]
-        ri = right_idx[row[right_col]]
-        sources.append(li)
-        targets.append(ri)
-        values.append(row["ACCESS_COUNT"])
+    sources, targets, values, link_colors = [], [], [], []
 
     if direction == "write":
-        link_color = "rgba(245, 166, 35, 0.35)"
-        node_colors = [AMBER] * len(left_nodes) + [SNOWFLAKE_BLUE] * len(right_nodes)
-        title = "Write Flows — Client → Database"
+        cw_color = "rgba(245, 166, 35, 0.35)"
+        wd_color = "rgba(245, 166, 35, 0.20)"
+        title = "Write Flows — Client → Warehouse → Database"
     else:
-        link_color = "rgba(41, 181, 232, 0.35)"
-        node_colors = [SNOWFLAKE_BLUE] * len(left_nodes) + [AMBER] * len(right_nodes)
-        title = "Read Flows — Client ← Database"
+        cw_color = "rgba(41, 181, 232, 0.35)"
+        wd_color = "rgba(41, 181, 232, 0.20)"
+        title = "Read Flows — Client ← Warehouse ← Database"
 
-    fig = go.Figure(go.Sankey(
-        arrangement="fixed",
-        node=dict(
-            pad=20,
-            thickness=18,
-            label=labels,
-            color=node_colors,
-            x=node_x,
-            y=node_y,
-            line=dict(width=0),
-        ),
-        link=dict(
-            source=sources,
-            target=targets,
-            value=values,
-            color=[link_color] * len(values),
-        ),
-    ))
+    for _, row in cw_flows.iterrows():
+        sources.append(client_idx[row["CLIENT"]])
+        targets.append(wh_idx[row["WAREHOUSE"]])
+        values.append(row["ACCESS_COUNT"])
+        link_colors.append(cw_color)
 
-    # Scale height so each node gets ~35px of vertical space minimum
-    n_max = max(n_left, n_right)
+    for _, row in wd_flows.iterrows():
+        sources.append(wh_idx[row["WAREHOUSE"]])
+        targets.append(db_idx[row["DATABASE"]])
+        values.append(row["ACCESS_COUNT"])
+        link_colors.append(wd_color)
+
+    # Node colors: clients, warehouses, databases
+    if direction == "write":
+        node_colors = (
+            [AMBER] * n_clients
+            + [MID_BLUE] * n_wh
+            + [SNOWFLAKE_BLUE] * n_db
+        )
+    else:
+        node_colors = (
+            [SNOWFLAKE_BLUE] * n_clients
+            + [MID_BLUE] * n_wh
+            + [AMBER] * n_db
+        )
+
+    fig = go.Figure(
+        go.Sankey(
+            arrangement="fixed",
+            node=dict(
+                pad=20,
+                thickness=18,
+                label=labels,
+                color=node_colors,
+                x=node_x,
+                y=node_y,
+                line=dict(width=0),
+            ),
+            link=dict(
+                source=sources,
+                target=targets,
+                value=values,
+                color=link_colors,
+            ),
+        )
+    )
+
+    n_max = max(n_clients, n_wh, n_db)
     chart_height = max(600, n_max * 35 + 100)
 
     fig.update_layout(
@@ -279,7 +312,9 @@ def _build_sankey(df: pd.DataFrame, direction: str) -> go.Figure | None:
 
 
 def render_sankey(df: pd.DataFrame) -> None:
-    """Render side-by-side Sankey diagrams for read and write flows.
+    """Render full-width Sankey diagrams for read and write flows.
+
+    Each diagram shows three columns: Client → Warehouse → Database.
 
     Args:
         df: The filtered access DataFrame.  No-ops if empty.
@@ -290,26 +325,29 @@ def render_sankey(df: pd.DataFrame) -> None:
     write_fig = _build_sankey(df, "write")
     read_fig = _build_sankey(df, "read")
 
-    col1, col2 = st.columns(2)
-    with col1:
-        if write_fig:
-            st.plotly_chart(write_fig, width="stretch")
-    with col2:
-        if read_fig:
-            st.plotly_chart(read_fig, width="stretch")
+    if write_fig:
+        st.plotly_chart(write_fig, use_container_width=True)
+    if read_fig:
+        st.plotly_chart(read_fig, use_container_width=True)
 
 
-def _build_heatmap(df: pd.DataFrame, grid_color: str) -> go.Figure | None:
-    """Build a Client x Database heatmap showing access intensity.
+def _build_heatmap(
+    df: pd.DataFrame,
+    grid_color: str,
+    row_col: str = "CLIENT",
+    col_col: str = "DATABASE",
+) -> go.Figure | None:
+    """Build a heatmap showing access intensity between two dimensions.
 
-    Pivots the DataFrame so clients are rows and databases are columns,
-    with cell values being total access counts.  Limits to the top 15
-    clients and top 15 databases by total volume to keep the chart
-    readable.
+    Pivots the DataFrame so *row_col* values are rows and *col_col*
+    values are columns, with cell values being total access counts.
+    Limits to the top 15 values on each axis by total volume.
 
     Args:
         df: The filtered access DataFrame.
         grid_color: CSS rgba color for axis lines.
+        row_col: Column name for the y-axis (rows).
+        col_col: Column name for the x-axis (columns).
 
     Returns:
         A ``plotly.graph_objects.Figure``, or ``None`` if *df* is empty.
@@ -318,26 +356,26 @@ def _build_heatmap(df: pd.DataFrame, grid_color: str) -> go.Figure | None:
         return None
 
     agg = (
-        df.groupby(["CLIENT", "DATABASE"], as_index=False)["ACCESS_COUNT"]
+        df.groupby([row_col, col_col], as_index=False)["ACCESS_COUNT"]
         .sum()
     )
 
-    # Limit to top 15 clients and top 15 databases by total volume
-    top_clients = (
-        agg.groupby("CLIENT")["ACCESS_COUNT"].sum()
+    # Limit to top 15 on each axis by total volume
+    top_rows = (
+        agg.groupby(row_col)["ACCESS_COUNT"].sum()
         .nlargest(15).index.tolist()
     )
-    top_dbs = (
-        agg.groupby("DATABASE")["ACCESS_COUNT"].sum()
+    top_cols = (
+        agg.groupby(col_col)["ACCESS_COUNT"].sum()
         .nlargest(15).index.tolist()
     )
-    agg = agg[agg["CLIENT"].isin(top_clients) & agg["DATABASE"].isin(top_dbs)]
+    agg = agg[agg[row_col].isin(top_rows) & agg[col_col].isin(top_cols)]
 
     if agg.empty:
         return None
 
     pivot = agg.pivot_table(
-        index="CLIENT", columns="DATABASE", values="ACCESS_COUNT", fill_value=0,
+        index=row_col, columns=col_col, values="ACCESS_COUNT", fill_value=0,
     )
     # Sort both axes by total descending
     pivot = pivot.loc[
@@ -360,29 +398,32 @@ def _build_heatmap(df: pd.DataFrame, grid_color: str) -> go.Figure | None:
         [1, STAR_BLUE],
     ]
 
+    row_label = row_col.replace("_", " ").title()
+    col_label = col_col.replace("_", " ").title()
+
     fig = go.Figure(go.Heatmap(
         z=pivot.values,
         x=pivot.columns.tolist(),
         y=pivot.index.tolist(),
         colorscale=colorscale,
-        hovertemplate="Client: %{y}<br>Database: %{x}<br>Access Count: %{z:,}<extra></extra>",
+        hovertemplate=f"{row_label}: %{{y}}<br>{col_label}: %{{x}}<br>Access Count: %{{z:,}}<extra></extra>",
     ))
 
     fig.update_layout(
         title=dict(
-            text="Access Heatmap — Client × Database",
+            text=f"Access Heatmap — {row_label} × {col_label}",
             font=dict(family="Lato, Arial, sans-serif", size=16),
             x=0.5,
             xanchor="center",
         ),
         font=dict(family="Lato, Arial, sans-serif", size=12),
         xaxis=dict(
-            title=dict(text="Database"),
+            title=dict(text=col_label),
             tickangle=-45,
             gridcolor=grid_color,
         ),
         yaxis=dict(
-            title=dict(text="Client"),
+            title=dict(text=row_label),
             gridcolor=grid_color,
         ),
         paper_bgcolor="rgba(0,0,0,0)",
@@ -485,9 +526,9 @@ def render_bar_charts(df: pd.DataFrame) -> None:
 
     Layout order:
     1. Bar charts — Client and Database side-by-side, Warehouse full-width
-    2. Heatmap — Client x Database access intensity (full-width)
+    2. Heatmaps — Client × Database, then Client × Warehouse (full-width)
     3. Treemap — Hierarchical access distribution (full-width)
-    4. Sankey diagrams — Read and Write flows side-by-side
+    4. Sankey diagrams — Read and Write flows full-width (Client → Warehouse → Database)
 
     Adapts bar and grid colors to the current Streamlit theme.
 
@@ -521,8 +562,12 @@ def render_bar_charts(df: pd.DataFrame) -> None:
     if fig:
         st.plotly_chart(fig, width="stretch")
 
-    # Heatmap
-    fig = _build_heatmap(df, grid_color)
+    # Heatmaps
+    fig = _build_heatmap(df, grid_color, "CLIENT", "DATABASE")
+    if fig:
+        st.plotly_chart(fig, width="stretch")
+
+    fig = _build_heatmap(df, grid_color, "CLIENT", "WAREHOUSE")
     if fig:
         st.plotly_chart(fig, width="stretch")
 
