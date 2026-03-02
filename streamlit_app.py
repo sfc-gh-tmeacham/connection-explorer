@@ -219,7 +219,7 @@ def main():
             filtered_df = filtered_df.head(row_limit)
 
         node_images = load_node_images()
-        hide_wh = st.session_state.get("hide_warehouses", False)
+        hide_wh = st.session_state.get("hide_warehouses", True)
         cluster_db = st.session_state.get("cluster_databases", False)
         render_network(filtered_df, node_images, session, fullscreen=True, hide_warehouses=hide_wh, cluster_databases=cluster_db)
         return

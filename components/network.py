@@ -473,8 +473,7 @@ export default function(component) {
                 color: textColor,
                 face: 'Lato, -apple-system, BlinkMacSystemFont, sans-serif',
                 strokeWidth: 4,
-                strokeColor: textColor === '#fafafa' || textColor === '#ffffff'
-                    ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.7)',
+                strokeColor: 'rgba(0,0,0,0.65)',
             },
         },
         edges: {
@@ -961,6 +960,10 @@ export default function(component) {
             container.style.width = bigW + 'px';
             container.style.height = bigH + 'px';
 
+            // Bump font stroke so it stays visible at the enlarged size
+            var scaleFactor = bigW / (origCW || 800);
+            network.setOptions({ nodes: { font: { strokeWidth: Math.round(4 * scaleFactor) } } });
+
             // Resize vis.js canvas, then wait for layout + paint
             network.setSize(bigW + 'px', bigH + 'px');
             network.fit();
@@ -977,7 +980,6 @@ export default function(component) {
                         const srcCanvas = canvasCtx.canvas;
                         const pixW = srcCanvas.width;
                         const pixH = srcCanvas.height;
-                        const ratio = pixW / bigW;
 
                         const exportCanvas = document.createElement('canvas');
                         exportCanvas.width = pixW;
@@ -994,7 +996,8 @@ export default function(component) {
                         console.error('PNG export failed:', e);
                     }
 
-                    // Restore original container size
+                    // Restore font stroke and container size
+                    network.setOptions({ nodes: { font: { strokeWidth: 4 } } });
                     container.style.width = origW;
                     container.style.height = origH;
                     container.style.position = origPos;

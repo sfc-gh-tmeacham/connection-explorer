@@ -24,7 +24,7 @@ def run():
     with toggle_col:
         tc1, tc2 = st.columns(2)
         with tc1:
-            hide_wh = st.checkbox("Hide Warehouses", key="hide_warehouses")
+            hide_wh = st.checkbox("Hide Warehouses", key="hide_warehouses", value=True)
         with tc2:
             cluster_db = st.checkbox("Cluster Databases", key="cluster_databases")
     with btn_col:
