@@ -2,7 +2,7 @@
 
 Builds an interactive force-directed graph where clients, warehouses, and
 databases are nodes and access events are weighted, directed edges.  Uses
-vis.js ``DataSet`` operations for click-to-isolate / restore and physics-based
+vis.js ``DataSet`` operations for click-to-filter and physics-based
 layout.  Custom tooltips are driven by vis.js hover events because the
 built-in tooltip mechanism is unavailable inside Components v2.
 """
@@ -228,7 +228,7 @@ _COMPONENT_CSS = f"""
 
 #vis-canvas {{
     width: 100%;
-    height: 680px;
+    height: calc(100vh - 220px);
     border: none;
     position: relative;
 }}
@@ -396,8 +396,7 @@ _COMPONENT_HTML = f"""
         </div>
         <div class="legend-section">
             <div class="legend-title">Interaction</div>
-            <div style="font-size:11px; opacity:0.7;">Click node to isolate</div>
-            <div style="font-size:11px; opacity:0.7;">Click canvas to restore</div>
+            <div style="font-size:11px; opacity:0.7;">Click node to filter · Click canvas to clear</div>
         </div>
         <button class="legend-btn" id="resetClustersBtn" style="display:none;">Expand All</button>
         <button class="legend-btn" id="downloadPngBtn">&#128247; Save PNG</button>
@@ -414,7 +413,7 @@ def _build_js() -> str:
     """Build the complete JavaScript module for the vis.js network component.
 
     Concatenates the vis-network UMD bundle with custom component code
-    that handles network creation, click-to-isolate / restore, custom
+    that handles network creation, click-to-filter, custom
     tooltips, and database clustering.  The vis.js source is injected as
     a JSON string literal so it can be evaluated at runtime via the
     ``Function`` constructor.
@@ -549,12 +548,7 @@ export default function(component) {
         network.stabilize();
     }
 
-    // --- Store original data for restore ---
-    const originalNodes = data.nodes.slice();
-    const originalEdges = data.edges.slice();
-    let isolated = false;
-
-    // --- Click: isolate subgraph or restore full network ---
+    // --- Click: send node info to Python for filtering ---
     network.on('click', function(params) {
         if (stabilizing) return;
         if (params.nodes.length === 1) {
@@ -566,74 +560,13 @@ export default function(component) {
                 return;
             }
 
-            // Use path triples [client, warehouse, database] to find
-            // only the exact routes that involve the clicked node.
-            const paths = data.paths || [];
-            const keepNodes = [nodeId];
-            const keepPathIndices = [];  // indices of matching paths
-
-            for (let p = 0; p < paths.length; p++) {
-                const client = paths[p][0];
-                const wh = paths[p][1];
-                const db = paths[p][2];
-                if (client === nodeId || wh === nodeId || db === nodeId) {
-                    if (keepNodes.indexOf(client) === -1) keepNodes.push(client);
-                    if (keepNodes.indexOf(wh) === -1) keepNodes.push(wh);
-                    if (keepNodes.indexOf(db) === -1) keepNodes.push(db);
-                    keepPathIndices.push(p);
-                }
-            }
-
-            // Find edges whose pathIndex matches a kept path
-            const keepEdgeIds = [];
-            for (let i = 0; i < originalEdges.length; i++) {
-                const e = originalEdges[i];
-                if (e.pathIndex !== undefined && keepPathIndices.indexOf(e.pathIndex) !== -1) {
-                    keepEdgeIds.push(e.id);
-                }
-            }
-
-            // Remove nodes not in the subgraph
-            const removeNodeIds = [];
-            const currentNodeIds = nodes.getIds();
-            for (let i = 0; i < currentNodeIds.length; i++) {
-                if (keepNodes.indexOf(currentNodeIds[i]) === -1) {
-                    removeNodeIds.push(currentNodeIds[i]);
-                }
-            }
-            if (removeNodeIds.length > 0) nodes.remove(removeNodeIds);
-
-            // Remove edges not in the subgraph
-            const removeEdgeIds = [];
-            const currentEdgeIds = edges.getIds();
-            for (let i = 0; i < currentEdgeIds.length; i++) {
-                if (keepEdgeIds.indexOf(currentEdgeIds[i]) === -1) {
-                    removeEdgeIds.push(currentEdgeIds[i]);
-                }
-            }
-            if (removeEdgeIds.length > 0) edges.remove(removeEdgeIds);
-
-            isolated = true;
-
-            // Let physics re-layout the isolated subgraph
-            restabilize();
-
-            // Send selected node back to Python
-            setTriggerValue('selected_node', nodeId);
-
-        } else if (params.nodes.length === 0 && params.edges.length === 0 && isolated) {
-            // Clicked empty canvas — restore full network
-            nodes.clear();
-            nodes.add(originalNodes);
-            edges.clear();
-            edges.add(originalEdges);
-            isolated = false;
-
-            // Re-run physics so restored network spreads out and fits
-            restabilize();
-
-            // Tell Python the isolation was cleared
-            setTriggerValue('selected_node', null);
+            // Send node type + id to Python so it can add to sidebar filters
+            // _ts ensures each click produces a unique trigger value.
+            const nodeType = nodeTypeMap[nodeId] || 'unknown';
+            setTriggerValue('selected_node', { nodeId: nodeId, nodeType: nodeType, _ts: Date.now() });
+        } else if (params.nodes.length === 0 && params.edges.length === 0) {
+            // Clicked empty canvas — tell Python to clear all filters
+            setTriggerValue('selected_node', { action: 'clear_all', _ts: Date.now() });
         }
     });
 
@@ -698,7 +631,6 @@ export default function(component) {
     })();
 
     function applyHoverFade(nodeId) {
-        if (isolated) return;  // Don't fade when already isolated via click
         const result = getConnectedSet(nodeId);
         const keepNodes = result.connectedNodes;
         const keepEdges = result.connectedEdgeIds;
@@ -1019,55 +951,6 @@ export default function(component) {
         applyClusters();
     }
 
-    // --- Auto-isolate on load if a node was previously selected ---
-    if (data.isolated_node) {
-        const nodeId = data.isolated_node;
-        const paths = data.paths || [];
-        const keepNodes = [nodeId];
-        const keepPathIndices = [];
-
-        for (let p = 0; p < paths.length; p++) {
-            const client = paths[p][0];
-            const wh = paths[p][1];
-            const db = paths[p][2];
-            if (client === nodeId || wh === nodeId || db === nodeId) {
-                if (keepNodes.indexOf(client) === -1) keepNodes.push(client);
-                if (keepNodes.indexOf(wh) === -1) keepNodes.push(wh);
-                if (keepNodes.indexOf(db) === -1) keepNodes.push(db);
-                keepPathIndices.push(p);
-            }
-        }
-
-        const keepEdgeIds = [];
-        for (let i = 0; i < originalEdges.length; i++) {
-            const e = originalEdges[i];
-            if (e.pathIndex !== undefined && keepPathIndices.indexOf(e.pathIndex) !== -1) {
-                keepEdgeIds.push(e.id);
-            }
-        }
-
-        const removeNodeIds = [];
-        const currentNodeIds = nodes.getIds();
-        for (let i = 0; i < currentNodeIds.length; i++) {
-            if (keepNodes.indexOf(currentNodeIds[i]) === -1) {
-                removeNodeIds.push(currentNodeIds[i]);
-            }
-        }
-        if (removeNodeIds.length > 0) nodes.remove(removeNodeIds);
-
-        const removeEdgeIds = [];
-        const currentEdgeIds = edges.getIds();
-        for (let i = 0; i < currentEdgeIds.length; i++) {
-            if (keepEdgeIds.indexOf(currentEdgeIds[i]) === -1) {
-                removeEdgeIds.push(currentEdgeIds[i]);
-            }
-        }
-        if (removeEdgeIds.length > 0) edges.remove(removeEdgeIds);
-
-        isolated = true;
-        restabilize();
-    }
-
     // --- Cleanup ---
     return function() {
         if (container._visNetwork) {
@@ -1123,7 +1006,7 @@ def render_network(df: pd.DataFrame, _node_images: Dict[str, str],
     constructs JSON-serializable node / edge / path lists that are passed
     to the vis.js front-end.  Each edge carries a ``pathIndex`` that links
     it to its exact ``[client, warehouse, database]`` path triple so the
-    JS click-to-isolate handler can filter edges unambiguously.
+    JS click-to-filter handler can identify node types.
 
     Args:
         df: Filtered access DataFrame.  If empty, an info message is
@@ -1209,6 +1092,7 @@ def render_network(df: pd.DataFrame, _node_images: Dict[str, str],
                 "size": int(wh_size), "color": transparent, "shape": "image",
                 "shapeProperties": shape_props, "borderWidth": 0,
                 "image": _node_images["warehouse"],
+                "nodeType": "warehouse",
             })
             added_nodes.add(warehouse)
 
@@ -1281,12 +1165,6 @@ def render_network(df: pd.DataFrame, _node_images: Dict[str, str],
 
     clusters = {label: members for label, members in cluster_members.items() if members}
 
-    isolated_node = st.session_state.get("isolated_node", None)
-    # Clear isolation if the node no longer exists in the current graph
-    if isolated_node and isolated_node not in added_nodes:
-        isolated_node = None
-        st.session_state["isolated_node"] = None
-
     # Build a plain {id: type} map so the JS glow handler can look up node
     # types without relying on vis.js DataSet preserving custom properties.
     node_type_map = {n["id"]: n["nodeType"] for n in nodes if "nodeType" in n}
@@ -1297,23 +1175,65 @@ def render_network(df: pd.DataFrame, _node_images: Dict[str, str],
         "paths": paths,
         "clusters": clusters,
         "cluster_databases": cluster_databases,
-        "isolated_node": isolated_node,
         "fullscreen": fullscreen,
         "nodeTypeMap": node_type_map,
     }
 
+    # --- Click-to-filter: trigger value + callback ---
+    # The JS sends {nodeId, nodeType, _ts} or {action:'clear_all', _ts}
+    # via setTriggerValue('selected_node', ...).  The on_change callback
+    # fires *before* the page re-runs (before widgets are instantiated),
+    # so it can safely write to widget keys in st.session_state.
+
+    _NODETYPE_TO_FILTER = {
+        "database": "persist_filter_database",
+        "warehouse": "persist_filter_warehouse",
+        "client": "persist_filter_client",
+    }
+
+    def _on_node_click():
+        state = st.session_state.get("network_graph")
+        if not state:
+            return
+        info = getattr(state, 'selected_node', None) or (
+            state.get('selected_node') if hasattr(state, 'get') else None
+        )
+        if not info or not isinstance(info, dict):
+            return
+        # Deduplicate: only process if _ts is newer than last processed
+        ts = info.get("_ts", 0)
+        last_ts = st.session_state.get("_last_click_ts", 0)
+        if ts <= last_ts:
+            return
+        st.session_state["_last_click_ts"] = ts
+
+        if info.get("action") == "clear_all":
+            for fk in _NODETYPE_TO_FILTER.values():
+                st.session_state[fk] = []
+                wk = fk.replace("persist_", "widget_")
+                st.session_state[wk] = []
+        else:
+            node_type = info.get("nodeType", "")
+            node_id = info.get("nodeId", "")
+            filter_key = _NODETYPE_TO_FILTER.get(node_type)
+            if filter_key and node_id:
+                current = st.session_state.get(filter_key, [])
+                if node_id not in current:
+                    new_val = current + [node_id]
+                else:
+                    new_val = current
+                st.session_state[filter_key] = new_val
+                wk = filter_key.replace("persist_", "widget_")
+                st.session_state[wk] = new_val
+
     mount = _get_component()
-    height = "stretch" if fullscreen else 720
+    height = "stretch"
 
     result = mount(
         data=component_data,
-        on_selected_node_change=lambda: None,
+        on_selected_node_change=_on_node_click,
         height=height,
         key="network_graph",
     )
-
-    # Persist the isolated node for checkbox toggles / reruns
-    if result and hasattr(result, 'selected_node'):
-        st.session_state["isolated_node"] = result.selected_node
 
     return result

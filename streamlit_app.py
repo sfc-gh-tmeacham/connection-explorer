@@ -128,7 +128,7 @@ def main():
             st.session_state[key] = [val] if val else []
 
     is_fullscreen = st.session_state.get("full_screen_mode", False)
-    logger.info("App started — fullscreen=%s", is_fullscreen)
+    logger.debug("App started — fullscreen=%s", is_fullscreen)
 
     # --- Fullscreen mode bypasses navigation ---
     if is_fullscreen:

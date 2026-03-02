@@ -326,9 +326,9 @@ def render_sankey(df: pd.DataFrame) -> None:
     read_fig = _build_sankey(df, "read")
 
     if write_fig:
-        st.plotly_chart(write_fig, use_container_width=True)
+        st.plotly_chart(write_fig, width="stretch")
     if read_fig:
-        st.plotly_chart(read_fig, use_container_width=True)
+        st.plotly_chart(read_fig, width="stretch")
 
 
 def _build_heatmap(
