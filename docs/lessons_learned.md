@@ -215,3 +215,21 @@ except Exception:
 ### `snowflake.yml` must list all files
 
 Every file referenced by the app (Python modules, SVG icons, CSS) must be listed in `snowflake.yml` under the stage artifacts. Missing files will cause import errors or broken assets when deployed.
+
+---
+
+## SVG Icon Sourcing for Brand Logos
+
+### Source priority for open-source brand SVGs
+
+1. **Simple Icons** (`simpleicons.org`) - Best source. Monochrome, single-path, 24x24 viewBox. Perfect for rendering as white silhouettes. Check both `master` and `develop` branches on GitHub, and newer npm versions (`npm pack simple-icons@latest`) which may have icons not yet on either branch.
+2. **Gilbarbara/logos** - Good fallback. Has square `-icon` suffix variants (e.g., `amplitude-icon.svg` at 256x256) that work well in circular frames. Avoid base names which are often wide wordmark logos (e.g., 512x107) that look terrible in circles.
+3. **Simple Icons CDN** (`cdn.simpleicons.org`) - Unreliable; HEAD requests may fail. Use GitHub raw URLs instead.
+
+### Gilbarbara wordmark vs icon variants
+
+Gilbarbara logos come in two forms: base (often wide wordmarks) and `-icon` suffix (square). Always check for the `-icon` variant first. Example: `amplitude.svg` is 512x107 (wordmark), `amplitude-icon.svg` is 256x256 (square logo mark). Some `-icon` variants exist but have zero `<path>` elements (e.g., `heap-icon.svg` uses only `<rect>` and `<circle>`), making them unusable for path-based renderers.
+
+### Most niche data tools have no open-source SVG icons
+
+Of 257 classified tools, only ~104 have brand SVG icons from open-source repos. The remaining ~150 are niche ETL, BI, or enterprise tools (Wherescape, Alooma, Attunity, Panoply, etc.) that don't appear in any major icon repository. The letter-abbreviation fallback is essential for coverage.
