@@ -84,12 +84,18 @@ def sidebar_filters(df):
             persisted = [persisted] if persisted else []
         default_vals = [v for v in persisted if v in options]
 
-        values[name] = st.sidebar.multiselect(
-            label, options, default=default_vals,
+        # Only pass default when the widget key is not already in session
+        # state.  If a callback (e.g. click-to-filter) pre-set the widget
+        # key, passing default= would conflict and raise an error.
+        ms_kwargs = dict(
             key=widget_key,
             on_change=_sync_filter,
             args=(persist_key, widget_key),
         )
+        if widget_key not in st.session_state:
+            ms_kwargs["default"] = default_vals
+
+        values[name] = st.sidebar.multiselect(label, options, **ms_kwargs)
         st.session_state[persist_key] = values[name]
 
     if "widget_filter_access_count" not in st.session_state:

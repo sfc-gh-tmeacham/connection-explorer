@@ -88,7 +88,7 @@ BEGIN
             q.query_type,
             q.query_id,
             SPLIT_PART(t.VALUE:objectName::VARCHAR, '.', 1) AS database,
-            SPLIT_PART(t.VALUE:objectName::VARCHAR, '.', 2) AS schema_name
+            SPLIT_PART(t.VALUE:objectName::VARCHAR, '.', 1) || '.' || SPLIT_PART(t.VALUE:objectName::VARCHAR, '.', 2) AS schema_name
         FROM snowflake.account_usage.sessions s
         INNER JOIN snowflake.account_usage.query_history q 
             ON q.session_id = s.session_id

@@ -1102,13 +1102,16 @@ def render_network(df: pd.DataFrame, _node_images: Dict[str, str],
         database = row["DATABASE"]
         warehouse = row["WAREHOUSE"]
         schema_name = row.get("SCHEMA_NAME", "") or ""
+
+        # SCHEMA_NAME is now fully qualified (e.g. "DB.SCHEMA").
+        # Use it directly as the node ID; extract short name for display.
+        schema_id = schema_name
+        schema_short = schema_name.split(".")[-1] if schema_name else ""
+
         ac = int(row["ACCESS_COUNT"])
         direction = row["DIRECTION"]
         org_name = row["ORGANIZATION_NAME"]
         client = row["CLIENT"]
-
-        # Schema node id uses "DB.SCHEMA" to avoid collisions across databases
-        schema_id = f"{database}.{schema_name}" if schema_name else ""
 
         # Add nodes (deduplicated)
         if not hide_databases and database not in added_nodes:
@@ -1130,11 +1133,11 @@ def render_network(df: pd.DataFrame, _node_images: Dict[str, str],
             added_nodes.add(database)
 
         if not hide_schemas and schema_id and schema_id not in added_nodes:
-            s = node_stats.get(schema_name, {})
+            s = node_stats.get(schema_id, {})
             sc_size = _log_scale(s.get("total", 0), global_min, global_max, 60, 160)
-            tooltip = _build_tooltip(schema_name, "Schema", s, org_name, current_account)
+            tooltip = _build_tooltip(schema_id, "Schema", s, org_name, current_account)
             nodes.append({
-                "id": schema_id, "label": schema_name, "title": tooltip,
+                "id": schema_id, "label": schema_short, "title": tooltip,
                 "size": int(sc_size), "color": transparent, "shape": "image",
                 "shapeProperties": shape_props, "borderWidth": 0,
                 "image": _node_images["schema"],
@@ -1206,8 +1209,8 @@ def render_network(df: pd.DataFrame, _node_images: Dict[str, str],
             visible_names.append(warehouse)
         if not hide_databases:
             visible_names.append(database)
-        if not hide_schemas and schema_name:
-            visible_names.append(schema_name)
+        if not hide_schemas and schema_short:
+            visible_names.append(schema_short)
         edge_title = " → ".join(visible_names) + f"\nDirection: {dir_label}\nAccess Count: {ac:,}"
 
         # Hidden node info in tooltip
@@ -1219,7 +1222,7 @@ def render_network(df: pd.DataFrame, _node_images: Dict[str, str],
         if hide_databases:
             hidden_parts.append(f"Database: {database}")
         if hide_schemas and schema_name:
-            hidden_parts.append(f"Schema: {schema_name}")
+            hidden_parts.append(f"Schema: {schema_id}")
         if hidden_parts:
             edge_title += "\n" + "\n".join(hidden_parts)
 

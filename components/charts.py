@@ -17,6 +17,11 @@ logger = logging.getLogger(__name__)
 from components.theme import SNOWFLAKE_BLUE, STAR_BLUE, AMBER, MID_BLUE, READ_GREEN, is_dark_theme
 
 
+def _short_schema(name: str) -> str:
+    """Extract short schema name from a qualified ``DATABASE.SCHEMA`` string."""
+    return name.split(".")[-1] if name else name
+
+
 @st.cache_data(show_spinner=False)
 def prepare_chart_data(df: pd.DataFrame, column: str, top_n: int = 10) -> pd.DataFrame:
     """Aggregate access counts by a dimension and direction for stacked bars.
@@ -196,7 +201,7 @@ def _build_sankey(df: pd.DataFrame, direction: str) -> go.Figure | None:
     wh_nodes = wh_totals.index.tolist()
     db_nodes = db_totals.index.tolist()
 
-    labels = client_nodes + wh_nodes + db_nodes + schema_nodes
+    labels = client_nodes + wh_nodes + db_nodes + [_short_schema(s) for s in schema_nodes]
     n_clients = len(client_nodes)
     n_wh = len(wh_nodes)
     n_db = len(db_nodes)
@@ -532,7 +537,7 @@ def _build_treemap(df: pd.DataFrame) -> go.Figure | None:
         for (client, db, schema), total in client_db_schema.items():
             uid = f"{client}/{db}/{schema}"
             ids.append(uid)
-            labels.append(schema)
+            labels.append(_short_schema(schema))
             parents.append(f"{client}/{db}")
             values.append(int(total))
             colors.append(SCHEMA_COLOR)
@@ -628,11 +633,18 @@ def render_bar_charts(df: pd.DataFrame) -> None:
             st.plotly_chart(fig, width="stretch")
 
     has_schema = "SCHEMA_NAME" in df.columns
+    # For display purposes, extract the short schema name from the qualified
+    # DATABASE.SCHEMA value stored in SCHEMA_NAME.
+    if has_schema:
+        display_df = df.copy()
+        display_df["SCHEMA_DISPLAY"] = display_df["SCHEMA_NAME"].apply(_short_schema)
+    else:
+        display_df = df
     col3, col4 = st.columns(2)
     with col3:
         if has_schema:
-            schema_data = prepare_chart_data(df, "SCHEMA_NAME")
-            fig = _build_bar_chart(schema_data, "SCHEMA_NAME", grid_color)
+            schema_data = prepare_chart_data(display_df, "SCHEMA_DISPLAY")
+            fig = _build_bar_chart(schema_data, "SCHEMA_DISPLAY", grid_color)
             if fig:
                 st.plotly_chart(fig, width="stretch")
     with col4:
@@ -646,7 +658,7 @@ def render_bar_charts(df: pd.DataFrame) -> None:
         st.plotly_chart(fig, width="stretch")
 
     if has_schema:
-        fig = _build_heatmap(df, grid_color, "DATABASE", "SCHEMA_NAME")
+        fig = _build_heatmap(display_df, grid_color, "DATABASE", "SCHEMA_DISPLAY")
         if fig:
             st.plotly_chart(fig, width="stretch")
 

@@ -20,14 +20,15 @@ st.session_state["widget_filter_client"] = ["Fivetran"]
 
 Reference: [Widget behavior docs](https://docs.streamlit.io/develop/concepts/architecture/widget-behavior)
 
-### The `default` parameter is ignored when a key exists in session state
+### The `default` parameter conflicts when a key exists in session state
 
-With key-based identity (v1.50.0+), if a widget's key already exists in `st.session_state`, the `default` parameter is silently ignored. The widget always uses the session state value.
+With key-based identity, if a widget's key already exists in `st.session_state`, passing `default=` raises `StreamlitAPIException: "widget was created with a default value but also had its value set via the Session State API"`. This commonly happens when a callback (e.g., click-to-filter) pre-sets the widget key before the widget renders. The fix is to conditionally omit `default`:
 
 ```python
-# If st.session_state["my_key"] == [], this default is ignored:
-st.multiselect("Label", options, default=["A", "B"], key="my_key")
-# Widget will show [] not ["A", "B"]
+ms_kwargs = dict(key=widget_key, on_change=callback, args=(...))
+if widget_key not in st.session_state:
+    ms_kwargs["default"] = default_vals
+st.sidebar.multiselect(label, options, **ms_kwargs)
 ```
 
 ### Widget keys cannot be set after the widget is instantiated
