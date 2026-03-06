@@ -152,6 +152,7 @@ BEGIN
             THEN 'DDL'
             WHEN query_type LIKE 'SHOW%' OR query_type LIKE 'DESCRIBE%' OR query_type IN ('DESC', 'LIST_FILES', 'EXPLAIN') THEN 'metadata'
             WHEN query_type IN ('SELECT', 'UNLOAD', 'GET_FILES') THEN 'read'
+            WHEN query_type IN ('COPY_FILES', 'REMOVE_FILES') THEN 'write'
             ELSE 'write'
         END AS direction, 
         COUNT(DISTINCT query_id) AS access_count
