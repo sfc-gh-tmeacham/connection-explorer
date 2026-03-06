@@ -24,33 +24,34 @@ def run():
     with toggle_col:
         tc1, tc2, tc3, tc4, tc5 = st.columns(5)
 
-        # Read current hide states to enforce "at most 1 hidden" constraint.
-        # If one is already checked, the others are disabled.
+        # Read current hide states to enforce "at least 2 visible" constraint.
+        # If two are already hidden, the others are disabled.
         cur_hide_wh = st.session_state.get("hide_warehouses", True)
         cur_hide_cl = st.session_state.get("hide_clients", False)
         cur_hide_db = st.session_state.get("hide_databases", False)
         cur_hide_sc = st.session_state.get("hide_schemas", False)
-        one_hidden = cur_hide_wh or cur_hide_cl or cur_hide_db or cur_hide_sc
+        hidden_count = sum([cur_hide_wh, cur_hide_cl, cur_hide_db, cur_hide_sc])
+        max_hidden = hidden_count >= 2
 
         with tc1:
             hide_wh = st.checkbox(
                 "Hide Warehouses", key="hide_warehouses", value=True,
-                disabled=one_hidden and not cur_hide_wh,
+                disabled=max_hidden and not cur_hide_wh,
             )
         with tc2:
             hide_cl = st.checkbox(
                 "Hide Clients", key="hide_clients",
-                disabled=one_hidden and not cur_hide_cl,
+                disabled=max_hidden and not cur_hide_cl,
             )
         with tc3:
             hide_db = st.checkbox(
                 "Hide Databases", key="hide_databases",
-                disabled=one_hidden and not cur_hide_db,
+                disabled=max_hidden and not cur_hide_db,
             )
         with tc4:
             hide_sc = st.checkbox(
                 "Hide Schemas", key="hide_schemas",
-                disabled=one_hidden and not cur_hide_sc,
+                disabled=max_hidden and not cur_hide_sc,
             )
         with tc5:
             cluster_db = st.checkbox("Cluster Databases", key="cluster_databases")
