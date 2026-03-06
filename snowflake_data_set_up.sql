@@ -39,8 +39,8 @@ USE SCHEMA APP;
 CREATE STAGE IF NOT EXISTS STREAMLIT_STAGE
     DIRECTORY = (ENABLE = TRUE);
 
--- Create the table to store 30-day access snapshot
-CREATE TABLE IF NOT EXISTS data_lake_access_30d (
+-- Create the table to store 30-day access snapshot (transient - no time travel/fail-safe needed)
+CREATE TRANSIENT TABLE IF NOT EXISTS data_lake_access_30d (
     organization_name VARCHAR,
     account_id VARCHAR,
     client VARCHAR,
@@ -72,9 +72,7 @@ LANGUAGE SQL
 AS
 $$
 BEGIN
-    TRUNCATE TABLE data_lake_access_30d;
-    
-    INSERT INTO data_lake_access_30d (
+    INSERT OVERWRITE INTO data_lake_access_30d (
         organization_name, account_id, client, warehouse, 
         database, schema_name, direction, access_count
     )
@@ -98,6 +96,7 @@ BEGIN
         WHERE q.start_time > DATEADD(day, -30, CURRENT_DATE())
             AND q.query_type != 'CALL'
             AND s.client_application_id NOT LIKE 'SYSTEM%'
+            AND SPLIT_PART(t.VALUE:objectName::VARCHAR, '.', 1) NOT LIKE 'USER$%'
     ),
     -- Match each session against the classification lookup table.
     -- A session can match on "application" or "client_app_id"; we keep only
