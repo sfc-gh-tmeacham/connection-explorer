@@ -1,11 +1,11 @@
-# Data Lake Explorer
+# Snowflake Connection Explorer
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue?logo=python&logoColor=white)](https://www.python.org/)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.54-FF4B4B?logo=streamlit&logoColor=white)](https://streamlit.io/)
 [![Snowflake](https://img.shields.io/badge/Snowflake-29B5E8?logo=snowflake&logoColor=white)](https://www.snowflake.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-**Full visibility into your Snowflake data access** — A Streamlit application that visualizes database, warehouse, and client application access patterns using interactive network graphs powered by Snowflake Horizon Catalog.
+**Full visibility into your Snowflake data access** — A Streamlit application that visualizes database, schema, warehouse, and client application access patterns using interactive network graphs powered by Snowflake Horizon Catalog.
 
 ![Snowflake](static/snowflake-bug-logo.png)
 
@@ -19,27 +19,32 @@ This repository is published **as-is** for reference and reuse.
 
 ## Features
 
-### Network Graph (Home Page)
-- **Interactive vis.js Network**: Visualizes connections between databases, warehouses, and client applications with physics-based layout
+### Network Graph Page
+- **Interactive vis.js Network**: Visualizes connections between clients, warehouses, databases, and schemas with physics-based layout
+- **4-Level Hierarchy**: CLIENT → WAREHOUSE → DATABASE → SCHEMA flow visualization
 - **SVG Client Icons**: Automatically displays branded icons for 60+ recognized client applications (Tableau, Power BI, Databricks, dbt, etc.)
 - **Click-to-Filter**: Click any node to add it to the sidebar filters (additive); click empty canvas to clear all filters
 - **Cluster Databases**: Group database nodes into a single cluster to simplify the view
-- **Hide Node Types**: Toggle warehouses (hidden by default), clients, or databases on/off — at most one type can be hidden to ensure edges remain meaningful
+- **Hide Node Types**: Toggle visibility for warehouses, clients, databases, or schemas — at least 2 types must remain visible
 - **Full Screen Mode**: Expand the network graph to fill the browser window
 - **Save PNG**: Export a high-resolution (4096px+) PNG of the network graph with readable labels
 
 ### Charts Page
-- **Stacked Bar Charts**: Top databases, warehouses, and clients by access count, split by read/write direction
-- **3-Column Sankey Diagrams**: Flow visualization of Client → Warehouse → Database access for reads and writes
-- **Client × Warehouse Heatmap**: Heat grid showing which clients use which warehouses
-- **Client × Database Heatmap**: Heat grid showing which clients access which databases
-- **Treemap**: Hierarchical view of access volume by database, warehouse, and client
+- **Stacked Bar Charts**: Top databases, schemas, warehouses, and clients by access count, split by read/write direction
+- **4-Column Sankey Diagrams**: Flow visualization of Client → Warehouse → Database → Schema access for reads and writes
+- **Heatmaps**: Client × Database, Database × Schema, and Client × Warehouse heat grids
+- **Treemap**: Hierarchical view of access volume by database, schema, warehouse, and client
+
+### Data Page
+- **Interactive Table**: View raw access data with sortable and filterable columns
+- **Group By**: Aggregate data by any combination of Client, Warehouse, Database, Schema, or Direction
+- **Access Totals**: Row counts and total access count summaries
 
 ### General
-- **Multi-Page Navigation**: Separate pages for the network graph and charts, with top-of-page navigation
+- **Multi-Page Navigation**: Separate pages for Network Graph, Charts, and Data with top-of-page navigation
 - **Real-time Data**: Pulls from Snowflake's `account_usage` views via Horizon Catalog
 - **Smart Client Detection**: Automatically identifies 60+ application types
-- **Flexible Filtering**: Filter by database, warehouse, client, organization, direction, and access count
+- **Flexible Filtering**: Filter by database, schema, warehouse, client, organization, direction, and access count
 - **Theme Support**: Adapts to Streamlit's light and dark themes
 - **Sample Data Mode**: Works locally without Snowflake connection for demos
 
@@ -126,9 +131,9 @@ deploy.bat my_snowflake_connection COMPUTE_WH
 ```
 
 The deployment script will:
-1. Create the `SNOWFLAKE_DATA_LAKE.DATA_LAKE_ACCESS` database and schema
-2. Create the data table and refresh task
-3. Execute the task to load initial 30-day access data
+1. Create the `CONNECTION_EXPLORER_APP_DB.APP` database and schema
+2. Create the transient data table and refresh stored procedure
+3. Execute the procedure to load initial 30-day access data
 4. Deploy the Streamlit app
 
 ### Manual Deployment
@@ -151,35 +156,41 @@ Or run directly in Snowflake:
 ```
 
 **What `snowflake_data_set_up.sql` creates:**
-- Database: `SNOWFLAKE_DATA_LAKE`
-- Schema: `DATA_LAKE_ACCESS`
-- Table: `data_lake_access_30d` (30-day access snapshot)
+- Database: `CONNECTION_EXPLORER_APP_DB`
+- Schema: `APP`
+- Table: `data_lake_access_30d` (transient table with 30-day access snapshot)
 - Stage: `STREAMLIT_STAGE` (for app deployment)
+- Procedure: `REFRESH_DATA_LAKE_ACCESS()` (uses INSERT OVERWRITE)
 - Task: `DATA_LAKE_ACCESS_REFRESH_TASK` (runs weekly on Sundays at 6am CST)
+
+**Data collected:**
+- Organization name and account name
+- Client application, warehouse, database, and fully-qualified schema name
+- Access direction (read, write, DDL, metadata)
+- Access count per combination
+- Excludes personal databases (`USER$%`) and system clients
 
 #### Step 2: Deploy the Streamlit App
 
 ```bash
 snow streamlit deploy \
     --connection <connection_name> \
-    --database SNOWFLAKE_DATA_LAKE \
-    --schema DATA_LAKE_ACCESS \
+    --database CONNECTION_EXPLORER_APP_DB \
+    --schema APP \
     --replace
 ```
 
 ### Customizing the Warehouse
 
-By default, the refresh task uses `COMPUTE_WH`. To change this, edit `snowflake_data_set_up.sql` before deployment:
+By default, the refresh task uses `CONNECTION_EXPLORER_WH`. To change this, edit `snowflake_data_set_up.sql` before deployment:
 
 ```sql
-CREATE OR REPLACE TASK SNOWFLAKE_DATA_LAKE.DATA_LAKE_ACCESS.DATA_LAKE_ACCESS_REFRESH_TASK
-  WAREHOUSE = YOUR_WAREHOUSE_NAME  -- Change this
-  ...
+SET WH_NAME = 'YOUR_WAREHOUSE_NAME';  -- Change this
 ```
 
 ## Uninstalling
 
-To remove all Data Lake Explorer objects from your account:
+To remove all Connection Explorer objects from your account:
 
 **Mac/Linux:**
 ```bash
@@ -212,7 +223,8 @@ data-lake-explorer/
 ├── streamlit_app.py              # Main app entry point and multi-page router
 ├── pages/                        # Streamlit pages
 │   ├── network.py                # Network graph page
-│   └── charts.py                 # Charts page (bars, Sankey, heatmaps, treemap)
+│   ├── charts.py                 # Charts page (bars, Sankey, heatmaps, treemap)
+│   └── data.py                   # Data table page with group-by
 ├── components/                   # Shared components and logic
 │   ├── network.py                # vis.js network rendering (inline HTML/JS)
 │   ├── charts.py                 # Plotly chart builders
@@ -223,8 +235,9 @@ data-lake-explorer/
 │   └── setup.py                  # Snowflake connection setup
 ├── static/                       # Static assets
 │   ├── client-icons/             # 60+ branded SVG client icons
-│   ├── snowflake-database.svg    # Database node icon
-│   ├── snowflake-warehouse.svg   # Warehouse node icon
+│   ├── snowflake-database.svg    # Database node icon (rounded square)
+│   ├── snowflake-warehouse.svg   # Warehouse node icon (diamond)
+│   ├── snowflake-schema.svg      # Schema node icon (hexagon)
 │   └── snowflake-bug-logo.*      # Snowflake logo
 ├── snowflake_data_set_up.sql     # Database/schema/task setup script
 ├── snowflake.yml                 # Snowflake CLI deployment config
@@ -243,8 +256,8 @@ The deploying role requires the following privileges:
 
 | Privilege | Purpose |
 |-----------|---------|
-| `CREATE DATABASE ON ACCOUNT` | Create the `SNOWFLAKE_DATA_LAKE` database |
-| `CREATE SCHEMA` | Create the `DATA_LAKE_ACCESS` schema |
+| `CREATE DATABASE ON ACCOUNT` | Create the `CONNECTION_EXPLORER_APP_DB` database |
+| `CREATE SCHEMA` | Create the `APP` schema |
 | `CREATE TABLE`, `CREATE STAGE`, `CREATE PROCEDURE` | Create objects in the schema |
 | `CREATE TASK`, `EXECUTE TASK` | Create and run the scheduled refresh task |
 | `IMPORTED PRIVILEGES ON DATABASE SNOWFLAKE` | Access to `account_usage` views |
@@ -259,7 +272,7 @@ The app queries data from `snowflake.account_usage` views:
 > GRANT IMPORTED PRIVILEGES ON DATABASE SNOWFLAKE TO ROLE <your_role>;
 > ```
 
-The refresh task pre-aggregates this data into `SNOWFLAKE_DATA_LAKE.DATA_LAKE_ACCESS.data_lake_access_30d` for fast dashboard performance.
+The refresh procedure pre-aggregates this data into `CONNECTION_EXPLORER_APP_DB.APP.data_lake_access_30d` for fast dashboard performance.
 
 ### Client Application Mappings
 
@@ -279,4 +292,3 @@ See [LICENSE](LICENSE) file.
 - [vis.js](https://visjs.org/) - Interactive network graph visualization
 - [Plotly](https://plotly.com/python/) - Charts (bar, Sankey, heatmap, treemap)
 - [Snowpark for Python](https://docs.snowflake.com/en/developer-guide/snowpark/python/index) - Snowflake connectivity
-
