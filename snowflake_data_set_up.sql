@@ -95,6 +95,7 @@ BEGIN
         TABLE(FLATTEN(a.direct_objects_accessed)) t
         WHERE q.start_time > DATEADD(day, -30, CURRENT_DATE())
             AND q.query_type != 'CALL'
+            AND q.query_type NOT IN ('BEGIN_TRANSACTION', 'COMMIT', 'ROLLBACK', 'SET', 'UNSET', 'USE')
             AND s.client_application_id NOT LIKE 'SYSTEM%'
             AND SPLIT_PART(t.VALUE:objectName::VARCHAR, '.', 1) NOT LIKE 'USER$%'
     ),
