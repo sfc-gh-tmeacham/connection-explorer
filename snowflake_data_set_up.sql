@@ -98,22 +98,44 @@ BEGIN
             AND s.client_application_id NOT LIKE 'SYSTEM%'
             AND SPLIT_PART(t.VALUE:objectName::VARCHAR, '.', 1) NOT LIKE 'USER$%'
     ),
-    -- Match each session against the classification lookup table.
-    -- A session can match on "application" or "client_app_id"; we keep only
-    -- the highest-priority (lowest priority number) match per row.
-    classified AS (
+    -- Split-join approach for better performance with large query volumes.
+    -- Step 1: Match on client_app_id patterns only
+    matched_by_app_id AS (
         SELECT
             rs.*,
-            c.display_name,
-            c.priority,
-            ROW_NUMBER() OVER (
-                PARTITION BY rs.query_id, rs.database, rs.schema_name
-                ORDER BY c.priority ASC
-            ) AS rn
+            c.display_name AS dn_app_id,
+            c.priority AS p_app_id
         FROM raw_sessions rs
         LEFT JOIN client_app_classification c
-            ON (c.source_field = 'client_app_id' AND rs.client_app_id ILIKE c.pattern)
-            OR (c.source_field = 'application'   AND rs.application   ILIKE c.pattern)
+            ON c.source_field = 'client_app_id' 
+            AND rs.client_app_id ILIKE c.pattern
+    ),
+    -- Step 2: Match on application patterns only
+    matched_by_application AS (
+        SELECT
+            m.*,
+            c.display_name AS dn_app,
+            c.priority AS p_app
+        FROM matched_by_app_id m
+        LEFT JOIN client_app_classification c
+            ON c.source_field = 'application' 
+            AND m.application ILIKE c.pattern
+    ),
+    -- Step 3: Pick the best (lowest priority) match from either source
+    classified AS (
+        SELECT
+            organization_name, account_id, client_app_id, application,
+            warehouse, query_type, query_id, database, schema_name,
+            CASE 
+                WHEN COALESCE(p_app_id, 999) <= COALESCE(p_app, 999) THEN dn_app_id 
+                ELSE dn_app 
+            END AS display_name,
+            LEAST(COALESCE(p_app_id, 999), COALESCE(p_app, 999)) AS priority,
+            ROW_NUMBER() OVER (
+                PARTITION BY query_id, database, schema_name
+                ORDER BY LEAST(COALESCE(p_app_id, 999), COALESCE(p_app, 999)) ASC
+            ) AS rn
+        FROM matched_by_application
     ),
     raw_access AS (
         SELECT

@@ -286,3 +286,41 @@ return 'warehouse';  // diamond
 ### `pyvis` is only used for its bundled `vis-network.min.js`
 
 The app imports `pyvis` solely to locate the vis.js library file bundled inside the package. If `pyvis` is missing, the network graph fails at component build time, not at render time. Ensure it's in your local environment even though it's not a direct runtime dependency.
+
+---
+
+## Snowflake SQL Performance
+
+### Split-join pattern for OR conditions in large tables
+
+When joining on multiple columns with OR conditions (e.g., match on `client_app_id` OR `application`), Snowflake's query optimizer may flag it as an "Inefficient join condition" that forces a cartesian product. The fix is to split the single OR-join into separate LEFT JOINs, then combine results:
+
+```sql
+-- INEFFICIENT: OR in join forces cartesian evaluation
+SELECT ... FROM raw_sessions rs
+LEFT JOIN classification c
+    ON (c.source_field = 'client_app_id' AND rs.client_app_id ILIKE c.pattern)
+    OR (c.source_field = 'application' AND rs.application ILIKE c.pattern)
+
+-- BETTER: Split into two joins, then pick best match
+matched_by_app_id AS (
+    SELECT rs.*, c.display_name AS dn_app_id, c.priority AS p_app_id
+    FROM raw_sessions rs
+    LEFT JOIN classification c
+        ON c.source_field = 'client_app_id' AND rs.client_app_id ILIKE c.pattern
+),
+matched_by_application AS (
+    SELECT m.*, c.display_name AS dn_app, c.priority AS p_app
+    FROM matched_by_app_id m
+    LEFT JOIN classification c
+        ON c.source_field = 'application' AND m.application ILIKE c.pattern
+),
+classified AS (
+    SELECT ...,
+        CASE WHEN COALESCE(p_app_id, 999) <= COALESCE(p_app, 999) 
+             THEN dn_app_id ELSE dn_app END AS display_name
+    FROM matched_by_application
+)
+```
+
+This "split-join" approach converts two OR branches into two sequential joins, each with a single equality predicate on `source_field`. The optimizer can now use equality filters efficiently, avoiding the cartesian product. For accounts with high query volumes (millions of rows in `query_history`), this can reduce execution time dramatically.
