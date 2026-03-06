@@ -277,11 +277,13 @@ def main():
     # --- Page navigation ---
     from pages.network import run as network_page
     from pages.charts import run as charts_page
+    from pages.data import run as data_page
 
     pg = st.navigation(
         [
             st.Page(network_page, title="Network Graph", default=True, url_path="network"),
             st.Page(charts_page, title="Charts", url_path="charts"),
+            st.Page(data_page, title="Data", url_path="data"),
         ],
         position="top",
     )
