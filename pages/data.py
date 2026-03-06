@@ -48,7 +48,7 @@ def run():
         "CLIENT": st.column_config.TextColumn("Client"),
         "WAREHOUSE": st.column_config.TextColumn("Warehouse"),
         "DATABASE": st.column_config.TextColumn("Database"),
-        "SCHEMA_NAME": st.column_config.TextColumn("Schema"),
+        "SCHEMA_NAME": st.column_config.TextColumn("Schema (DB.SCHEMA)"),
         "DIRECTION": st.column_config.TextColumn("Direction"),
         "ACCESS_COUNT": st.column_config.NumberColumn("Access Count", format="%d"),
     }
@@ -58,7 +58,7 @@ def run():
 
     st.dataframe(
         display_df,
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
         column_config=visible_config,
     )
