@@ -643,8 +643,8 @@ def render_bar_charts(df: pd.DataFrame) -> None:
     col3, col4 = st.columns(2)
     with col3:
         if has_schema:
-            schema_data = prepare_chart_data(display_df, "SCHEMA_DISPLAY")
-            fig = _build_bar_chart(schema_data, "SCHEMA_DISPLAY", grid_color)
+            schema_data = prepare_chart_data(df, "SCHEMA_NAME")
+            fig = _build_bar_chart(schema_data, "SCHEMA_NAME", grid_color)
             if fig:
                 st.plotly_chart(fig, width="stretch")
     with col4:
