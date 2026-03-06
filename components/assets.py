@@ -93,9 +93,28 @@ def load_node_images() -> Dict[str, str]:
     )
     db_encoded = base64.b64encode(square_svg.encode()).decode("utf-8")
 
+    # Wrap schema icon inside a hexagon badge.
+    with open(STATIC_DIR / "snowflake-schema.svg", "r") as f:
+        schema_inner = f.read()
+    schema_content = schema_inner.split(">", 1)[1].rsplit("</svg>", 1)[0]
+    schema_content = schema_content.replace('fill="#29B5E8"', 'fill="white"')
+    schema_content = schema_content.replace('stroke="#29B5E8"', 'stroke="white"')
+    # Pointy-top hexagon centred at (64,64) with radius ~60
+    hexagon_svg = (
+        '<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">'
+        f'<polygon points="64,4 117,34 117,94 64,124 11,94 11,34" fill="{MID_BLUE}" stroke="white" stroke-width="3"/>'
+        '<svg x="30" y="30" width="68" height="68" viewBox="0 0 200 200">'
+        f'{schema_content}'
+        '</svg>'
+        '</svg>'
+    )
+    schema_encoded = base64.b64encode(hexagon_svg.encode()).decode("utf-8")
+    logger.info("Loaded node images: warehouse (diamond), database (square), schema (hexagon)")
+
     return {
         "database": f"data:image/svg+xml;base64,{db_encoded}",
         "warehouse": f"data:image/svg+xml;base64,{wh_encoded}",
+        "schema": f"data:image/svg+xml;base64,{schema_encoded}",
     }
 
 

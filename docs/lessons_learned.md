@@ -241,3 +241,47 @@ Of 257 classified tools, only ~104 have brand SVG icons from open-source repos. 
 ### `GRANT USAGE ON STREAMLIT` requires the app to exist first
 
 You cannot grant access to a Streamlit app in the same SQL setup script that runs before `snow streamlit deploy`. The Streamlit object is created by the deploy command, not by SQL. Move the `GRANT USAGE ON STREAMLIT` to the deploy script, after `snow streamlit deploy` succeeds.
+
+---
+
+## Adding a New Node Type to a vis.js Network Graph
+
+### Use composite IDs to avoid node collisions across parents
+
+When the same name can appear under multiple parents (e.g., "PUBLIC" schema exists in multiple databases), the node ID must encode the parent context. Use `"DB.SCHEMA"` as the node ID while displaying just the schema name as the label:
+
+```python
+schema_id = f"{database}.{schema_name}"
+nodes.append({"id": schema_id, "label": schema_name, ...})
+```
+
+### Chain-based edge topology scales better than hardcoded branches
+
+With N hideable node types, hardcoded if/elif branches for edge creation grow combinatorially. A generic chain approach builds an ordered list of visible node IDs per row and creates edges between consecutive pairs:
+
+```python
+chain = []
+if not hide_clients: chain.append(client)
+if not hide_warehouses: chain.append(warehouse)
+if not hide_databases: chain.append(database)
+if not hide_schemas and schema_id: chain.append(schema_id)
+
+for i in range(len(chain) - 1):
+    _add_edge(chain[i], chain[i + 1], ...)
+```
+
+This handles any combination of hidden node types with zero branching logic.
+
+### Distinguish SVG polygon shapes by point count
+
+Both hexagons and diamonds use `<polygon>` SVG elements. In JavaScript, distinguish them by counting the space-separated coordinate pairs in the `points` attribute: 6 points = hexagon, 4 points = diamond.
+
+```javascript
+var pts = svg.match(/points="([^"]+)"/);
+if (pts && pts[1].split(/\s+/).length >= 6) return 'schema';  // hexagon
+return 'warehouse';  // diamond
+```
+
+### `pyvis` is only used for its bundled `vis-network.min.js`
+
+The app imports `pyvis` solely to locate the vis.js library file bundled inside the package. If `pyvis` is missing, the network graph fails at component build time, not at render time. Ensure it's in your local environment even though it's not a direct runtime dependency.

@@ -32,18 +32,18 @@ from components.theme import AMBER, READ_GREEN, SNOWFLAKE_BLUE
 def _aggregate_edges(df: pd.DataFrame) -> pd.DataFrame:
     """Aggregate duplicate edges by summing ACCESS_COUNT.
 
-    Groups rows by (CLIENT, WAREHOUSE, DATABASE, DIRECTION) and sums their
-    access counts so each unique route appears only once.
+    Groups rows by (CLIENT, WAREHOUSE, DATABASE, SCHEMA_NAME, DIRECTION)
+    and sums their access counts so each unique route appears only once.
 
     Args:
         df: Raw access DataFrame with at least CLIENT, WAREHOUSE, DATABASE,
-            DIRECTION, ACCESS_COUNT, ORGANIZATION_NAME, and ACCOUNT_NAME
-            columns.
+            SCHEMA_NAME, DIRECTION, ACCESS_COUNT, ORGANIZATION_NAME, and
+            ACCOUNT_NAME columns.
 
     Returns:
         Aggregated DataFrame sorted by ACCESS_COUNT descending.
     """
-    group_cols = ["CLIENT", "WAREHOUSE", "DATABASE", "DIRECTION"]
+    group_cols = ["CLIENT", "WAREHOUSE", "DATABASE", "SCHEMA_NAME", "DIRECTION"]
     agg = (
         df.groupby(group_cols, as_index=False)
         .agg(ACCESS_COUNT=("ACCESS_COUNT", "sum"),
@@ -57,9 +57,9 @@ def _compute_node_stats(df: pd.DataFrame) -> Dict[str, dict]:
     """Compute per-node stats: total access, read/write breakdown, top connections.
 
     Iterates over every row and accumulates totals for each database,
-    warehouse, and client node.  Also tracks which other nodes each node
-    is connected to (and by how much) so tooltips can show "Top
-    Connections".
+    schema, warehouse, and client node.  Also tracks which other nodes
+    each node is connected to (and by how much) so tooltips can show
+    "Top Connections".
 
     Args:
         df: Aggregated access DataFrame (output of ``_aggregate_edges``).
@@ -77,16 +77,24 @@ def _compute_node_stats(df: pd.DataFrame) -> Dict[str, dict]:
         ac = int(row["ACCESS_COUNT"])
         direction = row["DIRECTION"]
         rw = "write" if direction in ("write", "DML", "DDL") else "read"
+        schema_name = row.get("SCHEMA_NAME", "")
 
-        for node in (row["DATABASE"], row["WAREHOUSE"], row["CLIENT"]):
+        for node in (row["DATABASE"], schema_name, row["WAREHOUSE"], row["CLIENT"]):
+            if not node:
+                continue
             s = stats[node]
             s["total"] += ac
             s[rw] += ac
 
+        # Connections: each node tracks its neighbours
         stats[row["DATABASE"]]["connections"][row["CLIENT"]] += ac
         stats[row["CLIENT"]]["connections"][row["DATABASE"]] += ac
         stats[row["WAREHOUSE"]]["connections"][row["CLIENT"]] += ac
         stats[row["WAREHOUSE"]]["connections"][row["DATABASE"]] += ac
+        if schema_name:
+            stats[schema_name]["connections"][row["DATABASE"]] += ac
+            stats[row["DATABASE"]]["connections"][schema_name] += ac
+            stats[schema_name]["connections"][row["CLIENT"]] += ac
 
     return dict(stats)
 
@@ -603,10 +611,12 @@ export default function(component) {
             const client = paths[p][0];
             const wh = paths[p][1];
             const db = paths[p][2];
-            if (client === nodeId || wh === nodeId || db === nodeId) {
+            const sc = paths[p][3] || '';
+            if (client === nodeId || wh === nodeId || db === nodeId || sc === nodeId) {
                 if (connectedNodes.indexOf(client) === -1) connectedNodes.push(client);
                 if (connectedNodes.indexOf(wh) === -1) connectedNodes.push(wh);
                 if (connectedNodes.indexOf(db) === -1) connectedNodes.push(db);
+                if (sc && connectedNodes.indexOf(sc) === -1) connectedNodes.push(sc);
                 connectedPathIndices.push(p);
             }
         }
@@ -705,7 +715,15 @@ export default function(component) {
         if (nd && nd.image && nd.image.indexOf('base64,') !== -1) {
             try {
                 var svg = atob(nd.image.split('base64,')[1]);
-                if (svg.indexOf('<polygon') !== -1) { _nodeTypeCache[nodeId] = 'warehouse'; return 'warehouse'; }
+                if (svg.indexOf('<polygon') !== -1) {
+                    // Both warehouse (diamond) and schema (hexagon) use <polygon>
+                    // Hexagon has 6 points, diamond has 4
+                    var pts = svg.match(/points="([^"]+)"/);
+                    if (pts && pts[1].split(/\s+/).length >= 6) {
+                        _nodeTypeCache[nodeId] = 'schema'; return 'schema';
+                    }
+                    _nodeTypeCache[nodeId] = 'warehouse'; return 'warehouse';
+                }
                 if (svg.indexOf('<rect') !== -1) { _nodeTypeCache[nodeId] = 'database'; return 'database'; }
             } catch(e) {}
         }
@@ -749,8 +767,18 @@ export default function(component) {
             ctx.lineTo(x0, y0 + cr);
             ctx.quadraticCurveTo(x0, y0, x0 + cr, y0);
             ctx.closePath();
+        } else if (ntype === 'schema') {
+            // Hexagon (pointy-top)
+            for (var i = 0; i < 6; i++) {
+                var angle = Math.PI / 6 + i * Math.PI / 3;
+                var hx = pos.x + r * Math.cos(angle);
+                var hy = pos.y - r * Math.sin(angle);
+                if (i === 0) ctx.moveTo(hx, hy);
+                else ctx.lineTo(hx, hy);
+            }
+            ctx.closePath();
         } else {
-            // Circle
+            // Circle (client)
             ctx.arc(pos.x, pos.y, r, 0, 2 * Math.PI);
         }
 
@@ -1001,31 +1029,31 @@ def render_network(df: pd.DataFrame, _node_images: Dict[str, str],
                    hide_warehouses: bool = False,
                    hide_clients: bool = False,
                    hide_databases: bool = False,
+                   hide_schemas: bool = False,
                    cluster_databases: bool = False):
     """Build and render the interactive network graph as a v2 component.
 
     Aggregates the access DataFrame, computes per-node statistics, then
     constructs JSON-serializable node / edge / path lists that are passed
-    to the vis.js front-end.  Each edge carries a ``pathIndex`` that links
-    it to its exact ``[client, warehouse, database]`` path triple so the
-    JS click-to-filter handler can identify node types.
+    to the vis.js front-end.  The full chain is
+    CLIENT → WAREHOUSE → DATABASE → SCHEMA.  Each edge carries a
+    ``pathIndex`` that links it to its exact path tuple so the JS
+    click-to-filter handler can identify node types.
 
     Args:
         df: Filtered access DataFrame.  If empty, an info message is
             shown and ``None`` is returned.
         _node_images: Dict mapping node type (``"database"``,
-            ``"warehouse"``) to base-64 data-URI strings used as vis.js
-            node images.
+            ``"warehouse"``, ``"schema"``) to base-64 data-URI strings
+            used as vis.js node images.
         session: Active Snowflake session (or ``None`` in sample-data
             mode) used to resolve the current account name.
         fullscreen: If ``True``, the graph container expands to fill the
             viewport height.
-        hide_warehouses: If ``True``, warehouse nodes are omitted and
-            edges connect clients directly to databases.
-        hide_clients: If ``True``, client nodes are omitted and edges
-            connect warehouses directly to databases.
-        hide_databases: If ``True``, database nodes are omitted and
-            edges connect clients directly to warehouses.
+        hide_warehouses: If ``True``, warehouse nodes are omitted.
+        hide_clients: If ``True``, client nodes are omitted.
+        hide_databases: If ``True``, database nodes are omitted.
+        hide_schemas: If ``True``, schema nodes are omitted.
         cluster_databases: If ``True``, database nodes are automatically
             grouped into vis.js clusters on load based on naming rules.
 
@@ -1062,13 +1090,25 @@ def render_network(df: pd.DataFrame, _node_images: Dict[str, str],
     }
     shape_props = {"useBorderWithImage": True, "borderType": "circle"}
 
+    def _add_edge(src, dst, ac, edge_color, title, path_idx):
+        edges.append({
+            "id": f"e{len(edges)}", "from": src, "to": dst,
+            "value": ac, "color": edge_color, "arrows": "to",
+            "arrowStrikethrough": False, "title": title,
+            "pathIndex": path_idx,
+        })
+
     for _, row in agg_df.iterrows():
         database = row["DATABASE"]
         warehouse = row["WAREHOUSE"]
+        schema_name = row.get("SCHEMA_NAME", "") or ""
         ac = int(row["ACCESS_COUNT"])
         direction = row["DIRECTION"]
         org_name = row["ORGANIZATION_NAME"]
         client = row["CLIENT"]
+
+        # Schema node id uses "DB.SCHEMA" to avoid collisions across databases
+        schema_id = f"{database}.{schema_name}" if schema_name else ""
 
         # Add nodes (deduplicated)
         if not hide_databases and database not in added_nodes:
@@ -1088,6 +1128,19 @@ def render_network(df: pd.DataFrame, _node_images: Dict[str, str],
                 "nodeType": "database",
             })
             added_nodes.add(database)
+
+        if not hide_schemas and schema_id and schema_id not in added_nodes:
+            s = node_stats.get(schema_name, {})
+            sc_size = _log_scale(s.get("total", 0), global_min, global_max, 60, 160)
+            tooltip = _build_tooltip(schema_name, "Schema", s, org_name, current_account)
+            nodes.append({
+                "id": schema_id, "label": schema_name, "title": tooltip,
+                "size": int(sc_size), "color": transparent, "shape": "image",
+                "shapeProperties": shape_props, "borderWidth": 0,
+                "image": _node_images["schema"],
+                "nodeType": "schema",
+            })
+            added_nodes.add(schema_id)
 
         if not hide_warehouses and warehouse not in added_nodes:
             s = node_stats.get(warehouse, {})
@@ -1116,77 +1169,68 @@ def render_network(df: pd.DataFrame, _node_images: Dict[str, str],
             })
             added_nodes.add(client)
 
-        # Add edges — direction determines arrow direction.
-        # When a node type is hidden, edges connect the two remaining types
-        # directly with a single edge instead of two hops.
+        # --- Edge topology ---
+        # Full chain: CLIENT → WAREHOUSE → DATABASE → SCHEMA
+        # When one node type is hidden its neighbours connect directly.
+        # Build a list of visible node ids in chain order, then create
+        # edges between consecutive pairs.
         is_write = direction in ("write", "DML", "DDL")
         edge_color = AMBER if is_write else READ_GREEN
         dir_label = direction.upper() if direction else "READ"
         path_idx = len(paths)
 
+        # Ordered chain of (node_id, hidden_flag)
+        chain = []
+        if not hide_clients:
+            chain.append(client)
+        if not hide_warehouses:
+            chain.append(warehouse)
+        if not hide_databases:
+            chain.append(database)
+        if not hide_schemas and schema_id:
+            chain.append(schema_id)
+
+        # Paths array: always 4 elements [client, warehouse, database, schema]
+        # (fill with neighbour id when hidden so JS hover-fade still works)
+        path_client = client if not hide_clients else (chain[0] if chain else client)
+        path_wh = warehouse if not hide_warehouses else (chain[0] if chain else warehouse)
+        path_db = database if not hide_databases else (chain[-1] if chain else database)
+        path_sc = schema_id if (not hide_schemas and schema_id) else (chain[-1] if chain else database)
+        paths.append([path_client, path_wh, path_db, path_sc])
+
+        # Build tooltip showing full path
+        visible_names = []
+        if not hide_clients:
+            visible_names.append(client)
+        if not hide_warehouses:
+            visible_names.append(warehouse)
+        if not hide_databases:
+            visible_names.append(database)
+        if not hide_schemas and schema_name:
+            visible_names.append(schema_name)
+        edge_title = " → ".join(visible_names) + f"\nDirection: {dir_label}\nAccess Count: {ac:,}"
+
+        # Hidden node info in tooltip
+        hidden_parts = []
+        if hide_clients:
+            hidden_parts.append(f"Client: {client}")
         if hide_warehouses:
-            # Client ↔ Database (skip warehouse)
-            paths.append([client, client, database])
-            title = f"{client} → {database}\nDirection: {dir_label}\nWarehouse: {warehouse}\nAccess Count: {ac:,}"
-            src, dst = (client, database) if is_write else (database, client)
-            edges.append({
-                "id": f"e{len(edges)}", "from": src, "to": dst,
-                "value": ac, "color": edge_color, "arrows": "to",
-                "arrowStrikethrough": False, "title": title,
-                "pathIndex": path_idx,
-            })
-        elif hide_clients:
-            # Warehouse ↔ Database (skip client)
-            paths.append([warehouse, warehouse, database])
-            title = f"{warehouse} → {database}\nDirection: {dir_label}\nClient: {client}\nAccess Count: {ac:,}"
-            src, dst = (warehouse, database) if is_write else (database, warehouse)
-            edges.append({
-                "id": f"e{len(edges)}", "from": src, "to": dst,
-                "value": ac, "color": edge_color, "arrows": "to",
-                "arrowStrikethrough": False, "title": title,
-                "pathIndex": path_idx,
-            })
-        elif hide_databases:
-            # Client ↔ Warehouse (skip database)
-            paths.append([client, warehouse, warehouse])
-            title = f"{client} → {warehouse}\nDirection: {dir_label}\nDatabase: {database}\nAccess Count: {ac:,}"
-            src, dst = (client, warehouse) if is_write else (warehouse, client)
-            edges.append({
-                "id": f"e{len(edges)}", "from": src, "to": dst,
-                "value": ac, "color": edge_color, "arrows": "to",
-                "arrowStrikethrough": False, "title": title,
-                "pathIndex": path_idx,
-            })
-        else:
-            # All three node types visible — two edges per path
-            paths.append([client, warehouse, database])
-            edge_title = f"{client} → {warehouse} → {database}\nDirection: {dir_label}\nAccess Count: {ac:,}"
+            hidden_parts.append(f"Warehouse: {warehouse}")
+        if hide_databases:
+            hidden_parts.append(f"Database: {database}")
+        if hide_schemas and schema_name:
+            hidden_parts.append(f"Schema: {schema_name}")
+        if hidden_parts:
+            edge_title += "\n" + "\n".join(hidden_parts)
+
+        # Create edges between consecutive visible nodes
+        if len(chain) >= 2:
             if is_write:
-                edges.append({
-                    "id": f"e{len(edges)}", "from": client, "to": warehouse,
-                    "value": ac, "color": edge_color, "arrows": "to",
-                    "arrowStrikethrough": False, "title": edge_title,
-                    "pathIndex": path_idx,
-                })
-                edges.append({
-                    "id": f"e{len(edges)}", "from": warehouse, "to": database,
-                    "value": ac, "color": edge_color, "arrows": "to",
-                    "arrowStrikethrough": False, "title": edge_title,
-                    "pathIndex": path_idx,
-                })
+                for i in range(len(chain) - 1):
+                    _add_edge(chain[i], chain[i + 1], ac, edge_color, edge_title, path_idx)
             else:
-                edges.append({
-                    "id": f"e{len(edges)}", "from": database, "to": warehouse,
-                    "value": ac, "color": edge_color, "arrows": "to",
-                    "arrowStrikethrough": False, "title": edge_title,
-                    "pathIndex": path_idx,
-                })
-                edges.append({
-                    "id": f"e{len(edges)}", "from": warehouse, "to": client,
-                    "value": ac, "color": edge_color, "arrows": "to",
-                    "arrowStrikethrough": False, "title": edge_title,
-                    "pathIndex": path_idx,
-                })
+                for i in range(len(chain) - 1, 0, -1):
+                    _add_edge(chain[i], chain[i - 1], ac, edge_color, edge_title, path_idx)
 
     clusters = {label: members for label, members in cluster_members.items() if members}
 
@@ -1212,6 +1256,7 @@ def render_network(df: pd.DataFrame, _node_images: Dict[str, str],
 
     _NODETYPE_TO_FILTER = {
         "database": "persist_filter_database",
+        "schema": "persist_filter_schema",
         "warehouse": "persist_filter_warehouse",
         "client": "persist_filter_client",
     }

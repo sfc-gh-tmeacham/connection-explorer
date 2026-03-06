@@ -140,7 +140,7 @@ def _build_bar_chart(
 
 
 def _build_sankey(df: pd.DataFrame, direction: str) -> go.Figure | None:
-    """Build a 3-column Sankey: Client → Warehouse → Database.
+    """Build a 4-column Sankey: Client → Warehouse → Database → Schema.
 
     Nodes in each column are sorted by total volume descending, with
     flow-weighted y-positions so tall bars don't overlap.
@@ -158,9 +158,14 @@ def _build_sankey(df: pd.DataFrame, direction: str) -> go.Figure | None:
     if subset.empty:
         return None
 
-    # Aggregate by the full path: client → warehouse → database
+    # Aggregate by the full path: client → warehouse → database → schema
+    group_cols = ["CLIENT", "WAREHOUSE", "DATABASE"]
+    has_schema = "SCHEMA_NAME" in subset.columns
+    if has_schema:
+        group_cols.append("SCHEMA_NAME")
+
     flows = (
-        subset.groupby(["CLIENT", "WAREHOUSE", "DATABASE"], as_index=False)[
+        subset.groupby(group_cols, as_index=False)[
             "ACCESS_COUNT"
         ]
         .sum()
@@ -177,12 +182,21 @@ def _build_sankey(df: pd.DataFrame, direction: str) -> go.Figure | None:
     db_totals = (
         flows.groupby("DATABASE")["ACCESS_COUNT"].sum().sort_values(ascending=False)
     )
+    if has_schema:
+        schema_totals = (
+            flows.groupby("SCHEMA_NAME")["ACCESS_COUNT"].sum().sort_values(ascending=False)
+        )
+        schema_nodes = schema_totals.index.tolist()
+        n_schema = len(schema_nodes)
+    else:
+        schema_nodes = []
+        n_schema = 0
 
     client_nodes = client_totals.index.tolist()
     wh_nodes = wh_totals.index.tolist()
     db_nodes = db_totals.index.tolist()
 
-    labels = client_nodes + wh_nodes + db_nodes
+    labels = client_nodes + wh_nodes + db_nodes + schema_nodes
     n_clients = len(client_nodes)
     n_wh = len(wh_nodes)
     n_db = len(db_nodes)
@@ -190,6 +204,7 @@ def _build_sankey(df: pd.DataFrame, direction: str) -> go.Figure | None:
     client_idx = {name: i for i, name in enumerate(client_nodes)}
     wh_idx = {name: i + n_clients for i, name in enumerate(wh_nodes)}
     db_idx = {name: i + n_clients + n_wh for i, name in enumerate(db_nodes)}
+    schema_idx = {name: i + n_clients + n_wh + n_db for i, name in enumerate(schema_nodes)}
 
     # ── flow-weighted y-positions ────────────────────────────────
     def _flow_weighted_positions(totals: "pd.Series", n: int) -> list[float]:
@@ -216,34 +231,48 @@ def _build_sankey(df: pd.DataFrame, direction: str) -> go.Figure | None:
     node_x: list[float] = []
     node_y: list[float] = []
 
+    # Spread 4 columns evenly across x-axis
+    n_columns = 4 if n_schema > 0 else 3
+    x_positions = [0.001, 0.333, 0.666, 0.999] if n_columns == 4 else [0.001, 0.5, 0.999]
+
     for pos in _flow_weighted_positions(client_totals, n_clients):
-        node_x.append(0.001)
+        node_x.append(x_positions[0])
         node_y.append(pos)
     for pos in _flow_weighted_positions(wh_totals, n_wh):
-        node_x.append(0.5)
+        node_x.append(x_positions[1])
         node_y.append(pos)
     for pos in _flow_weighted_positions(db_totals, n_db):
-        node_x.append(0.999)
+        node_x.append(x_positions[2])
         node_y.append(pos)
+    if n_schema > 0:
+        for pos in _flow_weighted_positions(schema_totals, n_schema):
+            node_x.append(x_positions[3])
+            node_y.append(pos)
 
-    # ── links: client→warehouse and warehouse→database ──────────
+    # ── links: client→warehouse, warehouse→database, database→schema ──
     cw_flows = flows.groupby(["CLIENT", "WAREHOUSE"], as_index=False)[
         "ACCESS_COUNT"
     ].sum()
     wd_flows = flows.groupby(["WAREHOUSE", "DATABASE"], as_index=False)[
         "ACCESS_COUNT"
     ].sum()
+    if has_schema:
+        ds_flows = flows.groupby(["DATABASE", "SCHEMA_NAME"], as_index=False)[
+            "ACCESS_COUNT"
+        ].sum()
 
     sources, targets, values, link_colors = [], [], [], []
 
     if direction == "write":
         cw_color = "rgba(245, 166, 35, 0.35)"
-        wd_color = "rgba(245, 166, 35, 0.20)"
-        title = "Write Flows — Client → Warehouse → Database"
+        wd_color = "rgba(245, 166, 35, 0.25)"
+        ds_color = "rgba(245, 166, 35, 0.15)"
+        title = "Write Flows — Client → Warehouse → Database → Schema"
     else:
         cw_color = "rgba(41, 181, 232, 0.35)"
-        wd_color = "rgba(41, 181, 232, 0.20)"
-        title = "Read Flows — Client ← Warehouse ← Database"
+        wd_color = "rgba(41, 181, 232, 0.25)"
+        ds_color = "rgba(41, 181, 232, 0.15)"
+        title = "Read Flows — Client ← Warehouse ← Database ← Schema"
 
     for _, row in cw_flows.iterrows():
         sources.append(client_idx[row["CLIENT"]])
@@ -257,18 +286,28 @@ def _build_sankey(df: pd.DataFrame, direction: str) -> go.Figure | None:
         values.append(row["ACCESS_COUNT"])
         link_colors.append(wd_color)
 
-    # Node colors: clients, warehouses, databases
+    if has_schema:
+        for _, row in ds_flows.iterrows():
+            sources.append(db_idx[row["DATABASE"]])
+            targets.append(schema_idx[row["SCHEMA_NAME"]])
+            values.append(row["ACCESS_COUNT"])
+            link_colors.append(ds_color)
+
+    # Node colors: clients, warehouses, databases, schemas
+    SCHEMA_COLOR = "#1B9AAA"  # teal, distinct from Snowflake blue
     if direction == "write":
         node_colors = (
             [AMBER] * n_clients
             + [MID_BLUE] * n_wh
             + [SNOWFLAKE_BLUE] * n_db
+            + [SCHEMA_COLOR] * n_schema
         )
     else:
         node_colors = (
             [SNOWFLAKE_BLUE] * n_clients
             + [MID_BLUE] * n_wh
             + [AMBER] * n_db
+            + [SCHEMA_COLOR] * n_schema
         )
 
     fig = go.Figure(
@@ -292,7 +331,7 @@ def _build_sankey(df: pd.DataFrame, direction: str) -> go.Figure | None:
         )
     )
 
-    n_max = max(n_clients, n_wh, n_db)
+    n_max = max(n_clients, n_wh, n_db, n_schema) if n_schema > 0 else max(n_clients, n_wh, n_db)
     chart_height = max(600, n_max * 35 + 100)
 
     fig.update_layout(
@@ -314,7 +353,7 @@ def _build_sankey(df: pd.DataFrame, direction: str) -> go.Figure | None:
 def render_sankey(df: pd.DataFrame) -> None:
     """Render full-width Sankey diagrams for read and write flows.
 
-    Each diagram shows three columns: Client → Warehouse → Database.
+    Each diagram shows four columns: Client → Warehouse → Database → Schema.
 
     Args:
         df: The filtered access DataFrame.  No-ops if empty.
@@ -437,10 +476,10 @@ def _build_heatmap(
 def _build_treemap(df: pd.DataFrame) -> go.Figure | None:
     """Build a hierarchical treemap of access distribution.
 
-    Hierarchy is Client -> Database -> Direction, sized by access count.
-    Internal labels use unique IDs (e.g. ``"CLIENT/DB"``) to avoid
-    collisions when the same database appears under multiple clients;
-    ``textinfo`` shows only the leaf name.
+    Hierarchy is Client -> Database -> Schema -> Direction, sized by
+    access count.  Internal labels use unique IDs (e.g. ``"CLIENT/DB"``)
+    to avoid collisions when the same database appears under multiple
+    clients; ``textinfo`` shows only the leaf name.
 
     Args:
         df: The filtered access DataFrame.
@@ -451,8 +490,10 @@ def _build_treemap(df: pd.DataFrame) -> go.Figure | None:
     if df.empty:
         return None
 
+    has_schema = "SCHEMA_NAME" in df.columns
+    group_cols = ["CLIENT", "DATABASE"] + (["SCHEMA_NAME"] if has_schema else []) + ["DIRECTION"]
     agg = (
-        df.groupby(["CLIENT", "DATABASE", "DIRECTION"], as_index=False)["ACCESS_COUNT"]
+        df.groupby(group_cols, as_index=False)["ACCESS_COUNT"]
         .sum()
     )
     if agg.empty:
@@ -463,6 +504,8 @@ def _build_treemap(df: pd.DataFrame) -> go.Figure | None:
     parents = []
     values = []
     colors = []
+
+    SCHEMA_COLOR = "#1B9AAA"
 
     # Client level (top-level, no parent)
     client_totals = agg.groupby("CLIENT")["ACCESS_COUNT"].sum().sort_values(ascending=False)
@@ -483,17 +526,43 @@ def _build_treemap(df: pd.DataFrame) -> go.Figure | None:
         values.append(int(total))
         colors.append(STAR_BLUE)
 
-    # Direction level (unique id = "client/db/direction")
-    for _, row in agg.iterrows():
-        direction = row["DIRECTION"]
-        uid = f"{row['CLIENT']}/{row['DATABASE']}/{direction}"
-        parent_uid = f"{row['CLIENT']}/{row['DATABASE']}"
-        ids.append(uid)
-        labels.append(direction.upper())
-        parents.append(parent_uid)
-        values.append(int(row["ACCESS_COUNT"]))
-        color = AMBER if direction in ("write", "DML", "DDL") else READ_GREEN
-        colors.append(color)
+    if has_schema:
+        # Schema level (unique id = "client/db/schema")
+        client_db_schema = agg.groupby(["CLIENT", "DATABASE", "SCHEMA_NAME"])["ACCESS_COUNT"].sum()
+        for (client, db, schema), total in client_db_schema.items():
+            uid = f"{client}/{db}/{schema}"
+            ids.append(uid)
+            labels.append(schema)
+            parents.append(f"{client}/{db}")
+            values.append(int(total))
+            colors.append(SCHEMA_COLOR)
+
+        # Direction level (unique id = "client/db/schema/direction")
+        for _, row in agg.iterrows():
+            direction = row["DIRECTION"]
+            schema = row["SCHEMA_NAME"]
+            uid = f"{row['CLIENT']}/{row['DATABASE']}/{schema}/{direction}"
+            parent_uid = f"{row['CLIENT']}/{row['DATABASE']}/{schema}"
+            ids.append(uid)
+            labels.append(direction.upper())
+            parents.append(parent_uid)
+            values.append(int(row["ACCESS_COUNT"]))
+            color = AMBER if direction in ("write", "DML", "DDL") else READ_GREEN
+            colors.append(color)
+    else:
+        # Direction level without schema (unique id = "client/db/direction")
+        for _, row in agg.iterrows():
+            direction = row["DIRECTION"]
+            uid = f"{row['CLIENT']}/{row['DATABASE']}/{direction}"
+            parent_uid = f"{row['CLIENT']}/{row['DATABASE']}"
+            ids.append(uid)
+            labels.append(direction.upper())
+            parents.append(parent_uid)
+            values.append(int(row["ACCESS_COUNT"]))
+            color = AMBER if direction in ("write", "DML", "DDL") else READ_GREEN
+            colors.append(color)
+
+    title_text = "Access Distribution — Client → Database → Schema → Direction" if has_schema else "Access Distribution — Client → Database → Direction"
 
     fig = go.Figure(go.Treemap(
         ids=ids,
@@ -508,7 +577,7 @@ def _build_treemap(df: pd.DataFrame) -> go.Figure | None:
 
     fig.update_layout(
         title=dict(
-            text="Access Distribution — Client → Database → Direction",
+            text=title_text,
             font=dict(family="Lato, Arial, sans-serif", size=16),
             x=0.5,
             xanchor="center",
@@ -525,10 +594,10 @@ def render_bar_charts(df: pd.DataFrame) -> None:
     """Render all charts below the network graph.
 
     Layout order:
-    1. Bar charts — Client and Database side-by-side, Warehouse full-width
-    2. Heatmaps — Client × Database, then Client × Warehouse (full-width)
+    1. Bar charts — Client and Database side-by-side, Schema and Warehouse side-by-side
+    2. Heatmaps — Client × Database, Database × Schema, Client × Warehouse (full-width)
     3. Treemap — Hierarchical access distribution (full-width)
-    4. Sankey diagrams — Read and Write flows full-width (Client → Warehouse → Database)
+    4. Sankey diagrams — Read and Write flows full-width (Client → Warehouse → Database → Schema)
 
     Adapts bar and grid colors to the current Streamlit theme.
 
@@ -558,14 +627,28 @@ def render_bar_charts(df: pd.DataFrame) -> None:
         if fig:
             st.plotly_chart(fig, width="stretch")
 
-    fig = _build_bar_chart(wh_data, "WAREHOUSE", grid_color)
-    if fig:
-        st.plotly_chart(fig, width="stretch")
+    has_schema = "SCHEMA_NAME" in df.columns
+    col3, col4 = st.columns(2)
+    with col3:
+        if has_schema:
+            schema_data = prepare_chart_data(df, "SCHEMA_NAME")
+            fig = _build_bar_chart(schema_data, "SCHEMA_NAME", grid_color)
+            if fig:
+                st.plotly_chart(fig, width="stretch")
+    with col4:
+        fig = _build_bar_chart(wh_data, "WAREHOUSE", grid_color)
+        if fig:
+            st.plotly_chart(fig, width="stretch")
 
     # Heatmaps
     fig = _build_heatmap(df, grid_color, "CLIENT", "DATABASE")
     if fig:
         st.plotly_chart(fig, width="stretch")
+
+    if has_schema:
+        fig = _build_heatmap(df, grid_color, "DATABASE", "SCHEMA_NAME")
+        if fig:
+            st.plotly_chart(fig, width="stretch")
 
     fig = _build_heatmap(df, grid_color, "CLIENT", "WAREHOUSE")
     if fig:

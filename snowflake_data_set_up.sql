@@ -46,9 +46,13 @@ CREATE TABLE IF NOT EXISTS data_lake_access_30d (
     client VARCHAR,
     warehouse VARCHAR,
     database VARCHAR,
+    schema_name VARCHAR,
     direction VARCHAR,
     access_count NUMBER
 );
+
+-- Add schema_name column if upgrading from an older version of the table
+ALTER TABLE IF EXISTS data_lake_access_30d ADD COLUMN IF NOT EXISTS schema_name VARCHAR;
 
 -- Create the client application classification lookup table
 -- Seeded automatically by the Streamlit app from components/client_mappings.py.
@@ -72,7 +76,7 @@ BEGIN
     
     INSERT INTO data_lake_access_30d (
         organization_name, account_id, client, warehouse, 
-        database, direction, access_count
+        database, schema_name, direction, access_count
     )
     WITH raw_sessions AS (
         SELECT
@@ -83,7 +87,8 @@ BEGIN
             q.warehouse_name AS warehouse,
             q.query_type,
             q.query_id,
-            SPLIT_PART(t.VALUE:objectName::VARCHAR, '.', 1) AS database
+            SPLIT_PART(t.VALUE:objectName::VARCHAR, '.', 1) AS database,
+            SPLIT_PART(t.VALUE:objectName::VARCHAR, '.', 2) AS schema_name
         FROM snowflake.account_usage.sessions s
         INNER JOIN snowflake.account_usage.query_history q 
             ON q.session_id = s.session_id
@@ -103,7 +108,7 @@ BEGIN
             c.display_name,
             c.priority,
             ROW_NUMBER() OVER (
-                PARTITION BY rs.query_id, rs.database
+                PARTITION BY rs.query_id, rs.database, rs.schema_name
                 ORDER BY c.priority ASC
             ) AS rn
         FROM raw_sessions rs
@@ -125,7 +130,8 @@ BEGIN
             warehouse,
             query_type,
             query_id,
-            database
+            database,
+            schema_name
         FROM classified
         WHERE rn = 1 OR display_name IS NULL
     )
@@ -134,7 +140,8 @@ BEGIN
         account_id, 
         client, 
         warehouse,
-        database, 
+        database,
+        schema_name,
         CASE
             WHEN query_type LIKE 'CREATE%' 
                  OR query_type LIKE 'ALTER%' 

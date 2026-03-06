@@ -49,6 +49,7 @@ def ensure_tables_exist(_session) -> None:
                 client            VARCHAR,
                 warehouse         VARCHAR,
                 database          VARCHAR,
+                schema_name       VARCHAR,
                 direction         VARCHAR,
                 access_count      NUMBER
             )

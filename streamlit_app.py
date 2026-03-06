@@ -63,6 +63,7 @@ def sidebar_filters(df):
 
     filter_configs = [
         ("database", "DATABASE", "Select Database"),
+        ("schema", "SCHEMA_NAME", "Select Schema"),
         ("warehouse", "WAREHOUSE", "Select Warehouse"),
         ("client", "CLIENT", "Select Client"),
         ("direction", "DIRECTION", "Statement Type"),
@@ -109,6 +110,7 @@ def sidebar_filters(df):
     filtered_df = apply_filters(
         df,
         tuple(values["database"]),
+        tuple(values["schema"]),
         tuple(values["warehouse"]),
         tuple(values["client"]),
         "",
@@ -122,6 +124,7 @@ def main():
     """Application entry point — orchestrates data loading, filtering, and routing."""
     filter_defaults = {
         "persist_filter_database": [],
+        "persist_filter_schema": [],
         "persist_filter_warehouse": [],
         "persist_filter_client": [],
         "persist_filter_org": "",
@@ -135,6 +138,7 @@ def main():
 
     for key in (
         "persist_filter_database",
+        "persist_filter_schema",
         "persist_filter_warehouse",
         "persist_filter_client",
         "persist_filter_direction",
@@ -224,6 +228,7 @@ def main():
         filtered_df = apply_filters(
             processed_df,
             database_names=tuple(st.session_state.get("persist_filter_database", []) or []),
+            schema_names=tuple(st.session_state.get("persist_filter_schema", []) or []),
             warehouse_names=tuple(st.session_state.get("persist_filter_warehouse", []) or []),
             client_names=tuple(st.session_state.get("persist_filter_client", []) or []),
             org_filter=st.session_state.get("persist_filter_org", ""),
@@ -238,8 +243,9 @@ def main():
         hide_wh = st.session_state.get("hide_warehouses", True)
         hide_cl = st.session_state.get("hide_clients", False)
         hide_db = st.session_state.get("hide_databases", False)
+        hide_sc = st.session_state.get("hide_schemas", False)
         cluster_db = st.session_state.get("cluster_databases", False)
-        render_network(filtered_df, node_images, session, fullscreen=True, hide_warehouses=hide_wh, hide_clients=hide_cl, hide_databases=hide_db, cluster_databases=cluster_db)
+        render_network(filtered_df, node_images, session, fullscreen=True, hide_warehouses=hide_wh, hide_clients=hide_cl, hide_databases=hide_db, hide_schemas=hide_sc, cluster_databases=cluster_db)
         return
 
     # --- Normal mode ---

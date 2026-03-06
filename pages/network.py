@@ -22,14 +22,15 @@ def run():
             unsafe_allow_html=True,
         )
     with toggle_col:
-        tc1, tc2, tc3, tc4 = st.columns(4)
+        tc1, tc2, tc3, tc4, tc5 = st.columns(5)
 
         # Read current hide states to enforce "at most 1 hidden" constraint.
-        # If one is already checked, the other two are disabled.
+        # If one is already checked, the others are disabled.
         cur_hide_wh = st.session_state.get("hide_warehouses", True)
         cur_hide_cl = st.session_state.get("hide_clients", False)
         cur_hide_db = st.session_state.get("hide_databases", False)
-        one_hidden = cur_hide_wh or cur_hide_cl or cur_hide_db
+        cur_hide_sc = st.session_state.get("hide_schemas", False)
+        one_hidden = cur_hide_wh or cur_hide_cl or cur_hide_db or cur_hide_sc
 
         with tc1:
             hide_wh = st.checkbox(
@@ -47,6 +48,11 @@ def run():
                 disabled=one_hidden and not cur_hide_db,
             )
         with tc4:
+            hide_sc = st.checkbox(
+                "Hide Schemas", key="hide_schemas",
+                disabled=one_hidden and not cur_hide_sc,
+            )
+        with tc5:
             cluster_db = st.checkbox("Cluster Databases", key="cluster_databases")
     with btn_col:
         st.markdown('<div class="fullscreen-btn-container"></div>', unsafe_allow_html=True)
@@ -57,5 +63,5 @@ def run():
     render_network(
         df, node_images, session,
         fullscreen=False, hide_warehouses=hide_wh, hide_clients=hide_cl,
-        hide_databases=hide_db, cluster_databases=cluster_db,
+        hide_databases=hide_db, hide_schemas=hide_sc, cluster_databases=cluster_db,
     )

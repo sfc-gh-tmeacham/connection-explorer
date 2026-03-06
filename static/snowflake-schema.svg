@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <!-- Table/grid icon representing a database schema -->
+  <!-- Uses stroke-based design so fill can be swapped to white -->
+  <g fill="none" stroke="#29B5E8" stroke-width="8">
+    <!-- Outer border -->
+    <rect x="24" y="24" width="152" height="152" rx="12" ry="12"/>
+    <!-- Horizontal dividers -->
+    <line x1="24" y1="64" x2="176" y2="64"/>
+    <line x1="24" y1="104" x2="176" y2="104"/>
+    <line x1="24" y1="144" x2="176" y2="144"/>
+    <!-- Vertical divider -->
+    <line x1="90" y1="24" x2="90" y2="176"/>
+  </g>
+</svg>
