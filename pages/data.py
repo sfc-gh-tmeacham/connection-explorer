@@ -2,6 +2,8 @@
 
 import streamlit as st
 
+from components.client_mappings import generate_client_icon_uri
+
 # Columns available for grouping (exclude ACCESS_COUNT since it's the measure)
 GROUP_COLUMNS = {
     "Client": "CLIENT",
@@ -10,6 +12,9 @@ GROUP_COLUMNS = {
     "Schema": "SCHEMA_NAME",
     "Direction": "DIRECTION",
 }
+
+# Logical column order: CLIENT → WAREHOUSE → DATABASE → SCHEMA → DIRECTION → ACCESS_COUNT
+COLUMN_ORDER = ["ICON", "CLIENT", "WAREHOUSE", "DATABASE", "SCHEMA_NAME", "DIRECTION", "ACCESS_COUNT"]
 
 
 def run():
@@ -40,11 +45,20 @@ def run():
         )
         row_label = "groups"
     else:
-        display_df = df
+        display_df = df.copy()
         row_label = "rows"
 
-    # Build column config for visible columns
+    # Add client icon column if CLIENT column exists
+    if "CLIENT" in display_df.columns:
+        display_df["ICON"] = display_df["CLIENT"].apply(generate_client_icon_uri)
+
+    # Reorder columns to match logical flow
+    ordered_cols = [c for c in COLUMN_ORDER if c in display_df.columns]
+    display_df = display_df[ordered_cols]
+
+    # Build column config
     column_config = {
+        "ICON": st.column_config.ImageColumn("", width="small"),
         "CLIENT": st.column_config.TextColumn("Client"),
         "WAREHOUSE": st.column_config.TextColumn("Warehouse"),
         "DATABASE": st.column_config.TextColumn("Database"),
