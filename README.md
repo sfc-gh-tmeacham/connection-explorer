@@ -166,9 +166,17 @@ Or run directly in Snowflake:
 **Data collected:**
 - Organization name and account name
 - Client application, warehouse, database, and fully-qualified schema name
-- Access direction (read, write, DDL, metadata)
+- Access direction:
+  - **read**: SELECT, UNLOAD, GET_FILES
+  - **write**: INSERT, UPDATE, DELETE, MERGE, COPY, PUT_FILES, COPY_FILES, REMOVE_FILES
+  - **DDL**: CREATE, ALTER, DROP, TRUNCATE, RENAME, UNDROP, COMMENT, GRANT, REVOKE, RESTORE
+  - **metadata**: SHOW, DESCRIBE, LIST_FILES, EXPLAIN
 - Access count per combination
-- Excludes personal databases (`USER$%`) and system clients
+- Excludes: personal databases (`USER$%`), system clients, session/transaction commands
+
+**Performance optimizations:**
+- Uses split-join pattern for client classification to handle high query volumes efficiently
+- Transient table with INSERT OVERWRITE for atomic refreshes without time travel overhead
 
 #### Step 2: Deploy the Streamlit App
 
