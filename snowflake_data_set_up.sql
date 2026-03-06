@@ -79,7 +79,7 @@ BEGIN
     WITH raw_sessions AS (
         SELECT
             CURRENT_ORGANIZATION_NAME() AS organization_name,
-            CURRENT_ACCOUNT() AS account_id,
+            CURRENT_ACCOUNT_NAME() AS account_id,
             s.client_application_id AS client_app_id,
             PARSE_JSON(s.client_environment):APPLICATION::VARCHAR AS application,
             q.warehouse_name AS warehouse,
