@@ -122,7 +122,7 @@ BEGIN
             ON c.source_field = 'application' 
             AND m.application ILIKE c.pattern
     ),
-    -- Step 3: Pick the best (lowest priority) match from either source
+    -- Step 3: Pick the best match (lowest priority value = highest rank)
     classified AS (
         SELECT
             organization_name, account_id, client_app_id, application,
