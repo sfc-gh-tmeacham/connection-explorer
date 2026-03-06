@@ -1,4 +1,4 @@
-"""Data Lake Explorer — main Streamlit application entry point.
+"""Snowflake Connection Explorer — main Streamlit application entry point.
 
 Loads Snowflake access data, presents sidebar filters, and routes between
 the Network Graph and Charts pages using st.navigation with top positioning.
@@ -22,17 +22,21 @@ from components.theme import CUSTOM_CSS
 try:  # Streamlit in Snowflake automatically injects a Snowpark session
     from snowflake.snowpark.context import get_active_session
     session = get_active_session()
-except Exception:  # Running locally without Snowflake
-    session = None
+except Exception:  # Running locally — use st.connection from secrets.toml
+    try:
+        conn = st.connection("snowflake")
+        session = conn.session()
+    except Exception:
+        session = None
 
 st.set_page_config(
-    page_title="Data Lake Explorer",
+    page_title="Snowflake Connection Explorer",
     page_icon=str(FAVICON_PATH),
     layout="wide",
     initial_sidebar_state="collapsed",
     menu_items={
         "Get Help": "https://developers.snowflake.com",
-        "About": "Data Lake Explorer - Full visibility into your Snowflake data access. "
+        "About": "Snowflake Connection Explorer - Full visibility into your Snowflake data access. "
         "Built with Snowpark for Python and Streamlit.",
     },
 )

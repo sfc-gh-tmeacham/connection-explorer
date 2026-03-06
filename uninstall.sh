@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================================
-# Data Lake Explorer - Uninstall Script
+# Snowflake Connection Explorer - Uninstall Script
 # 
 # This script removes all objects created by the deployment:
 #   - Streamlit app
@@ -19,7 +19,7 @@
 #   ./uninstall.sh <connection_name> [--keep-database]
 #
 # Options:
-#   --keep-database    Keep the SNOWFLAKE_DATA_LAKE database (only remove schema)
+#   --keep-database    Keep the CONNECTION_EXPLORER_APP_DB database (only remove schema)
 #
 # Example:
 #   ./uninstall.sh my_snowflake_connection
@@ -54,21 +54,21 @@ if [ -z "$CONNECTION" ]; then
 fi
 
 echo "=============================================="
-echo "  Data Lake Explorer - Uninstall"
+echo "  Snowflake Connection Explorer - Uninstall"
 echo "=============================================="
 echo ""
 echo "Connection:    $CONNECTION"
 echo "Keep Database: $KEEP_DATABASE"
 echo ""
 echo "This will remove:"
-echo "  - Streamlit app: SNOWFLAKE_DATA_LAKE_EXPLORER"
+echo "  - Streamlit app: SNOWFLAKE_CONNECTION_EXPLORER"
 echo "  - Task: DATA_LAKE_ACCESS_REFRESH_TASK"
 echo "  - Procedure: REFRESH_DATA_LAKE_ACCESS"
 echo "  - Table: data_lake_access_30d"
 echo "  - Stage: STREAMLIT_STAGE"
-echo "  - Schema: DATA_LAKE_ACCESS"
+echo "  - Schema: APP"
 if [ "$KEEP_DATABASE" = false ]; then
-    echo "  - Database: SNOWFLAKE_DATA_LAKE"
+    echo "  - Database: CONNECTION_EXPLORER_APP_DB"
 fi
 echo ""
 read -p "Are you sure you want to continue? (y/N) " -n 1 -r
@@ -82,33 +82,33 @@ fi
 echo ""
 echo "[1/4] Dropping Streamlit app..."
 snow sql --connection "$CONNECTION" -q \
-    "DROP STREAMLIT IF EXISTS SNOWFLAKE_DATA_LAKE.DATA_LAKE_ACCESS.SNOWFLAKE_DATA_LAKE_EXPLORER;"
+    "DROP STREAMLIT IF EXISTS CONNECTION_EXPLORER_APP_DB.APP.SNOWFLAKE_CONNECTION_EXPLORER;"
 
 echo ""
 echo "[2/4] Suspending and dropping task..."
 snow sql --connection "$CONNECTION" -q \
-    "ALTER TASK IF EXISTS SNOWFLAKE_DATA_LAKE.DATA_LAKE_ACCESS.DATA_LAKE_ACCESS_REFRESH_TASK SUSPEND;"
+    "ALTER TASK IF EXISTS CONNECTION_EXPLORER_APP_DB.APP.DATA_LAKE_ACCESS_REFRESH_TASK SUSPEND;"
 snow sql --connection "$CONNECTION" -q \
-    "DROP TASK IF EXISTS SNOWFLAKE_DATA_LAKE.DATA_LAKE_ACCESS.DATA_LAKE_ACCESS_REFRESH_TASK;"
+    "DROP TASK IF EXISTS CONNECTION_EXPLORER_APP_DB.APP.DATA_LAKE_ACCESS_REFRESH_TASK;"
 
 echo ""
 echo "[3/4] Dropping procedure, table, and stage..."
 snow sql --connection "$CONNECTION" -q \
-    "DROP PROCEDURE IF EXISTS SNOWFLAKE_DATA_LAKE.DATA_LAKE_ACCESS.REFRESH_DATA_LAKE_ACCESS();"
+    "DROP PROCEDURE IF EXISTS CONNECTION_EXPLORER_APP_DB.APP.REFRESH_DATA_LAKE_ACCESS();"
 snow sql --connection "$CONNECTION" -q \
-    "DROP TABLE IF EXISTS SNOWFLAKE_DATA_LAKE.DATA_LAKE_ACCESS.data_lake_access_30d;"
+    "DROP TABLE IF EXISTS CONNECTION_EXPLORER_APP_DB.APP.data_lake_access_30d;"
 snow sql --connection "$CONNECTION" -q \
-    "DROP STAGE IF EXISTS SNOWFLAKE_DATA_LAKE.DATA_LAKE_ACCESS.STREAMLIT_STAGE;"
+    "DROP STAGE IF EXISTS CONNECTION_EXPLORER_APP_DB.APP.STREAMLIT_STAGE;"
 
 echo ""
 if [ "$KEEP_DATABASE" = true ]; then
     echo "[4/4] Dropping schema (keeping database)..."
     snow sql --connection "$CONNECTION" -q \
-        "DROP SCHEMA IF EXISTS SNOWFLAKE_DATA_LAKE.DATA_LAKE_ACCESS;"
+        "DROP SCHEMA IF EXISTS CONNECTION_EXPLORER_APP_DB.APP;"
 else
     echo "[4/4] Dropping database..."
     snow sql --connection "$CONNECTION" -q \
-        "DROP DATABASE IF EXISTS SNOWFLAKE_DATA_LAKE;"
+        "DROP DATABASE IF EXISTS CONNECTION_EXPLORER_APP_DB;"
 fi
 
 echo ""
@@ -116,5 +116,5 @@ echo "=============================================="
 echo "  Uninstall Complete!"
 echo "=============================================="
 echo ""
-echo "All Data Lake Explorer objects have been removed."
+echo "All Snowflake Connection Explorer objects have been removed."
 echo ""

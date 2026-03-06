@@ -1,6 +1,6 @@
 """Auto-setup: create and seed Snowflake objects on first run.
 
-Creates the ``SNOWFLAKE_DATA_LAKE.DATA_LAKE_ACCESS`` schema, the
+Creates the ``CONNECTION_EXPLORER_APP_DB.APP`` schema, the
 ``data_lake_access_30d`` access table, and the ``client_app_classification``
 lookup table if they do not already exist.  The classification table is
 seeded via MERGE from ``CLIENT_MAPPINGS`` so re-runs are idempotent.
@@ -14,15 +14,15 @@ logger = logging.getLogger(__name__)
 
 from components.client_mappings import CLIENT_MAPPINGS
 
-DB = "SNOWFLAKE_DATA_LAKE"
-SCHEMA = "DATA_LAKE_ACCESS"
+DB = "CONNECTION_EXPLORER_APP_DB"
+SCHEMA = "APP"
 FQ_SCHEMA = f"{DB}.{SCHEMA}"
 FQ_ACCESS_TABLE = f"{FQ_SCHEMA}.data_lake_access_30d"
 FQ_CLASSIFICATION_TABLE = f"{FQ_SCHEMA}.client_app_classification"
 
 
 @st.cache_data(show_spinner=False, ttl=3600)
-def ensure_tables_exist(session) -> None:
+def ensure_tables_exist(_session) -> None:
     """Create required Snowflake objects and seed the classification lookup.
 
     Idempotent -- safe to call on every app load.  Runs once per hour via
@@ -33,16 +33,16 @@ def ensure_tables_exist(session) -> None:
         session: A Snowpark ``Session`` object, or ``None`` (in which case
             the function returns immediately).
     """
-    if session is None:
+    if _session is None:
         return
 
     try:
         # --- database & schema ---
-        session.sql(f"CREATE DATABASE IF NOT EXISTS {DB}").collect()
-        session.sql(f"CREATE SCHEMA IF NOT EXISTS {FQ_SCHEMA}").collect()
+        _session.sql(f"CREATE DATABASE IF NOT EXISTS {DB}").collect()
+        _session.sql(f"CREATE SCHEMA IF NOT EXISTS {FQ_SCHEMA}").collect()
 
         # --- access data table ---
-        session.sql(f"""
+        _session.sql(f"""
             CREATE TABLE IF NOT EXISTS {FQ_ACCESS_TABLE} (
                 organization_name VARCHAR,
                 account_id        VARCHAR,
@@ -55,7 +55,7 @@ def ensure_tables_exist(session) -> None:
         """).collect()
 
         # --- classification lookup table ---
-        session.sql(f"""
+        _session.sql(f"""
             CREATE TABLE IF NOT EXISTS {FQ_CLASSIFICATION_TABLE} (
                 priority       NUMBER,
                 pattern        VARCHAR,
@@ -71,7 +71,7 @@ def ensure_tables_exist(session) -> None:
             for i, (pat, src, name) in enumerate(CLIENT_MAPPINGS)
         )
 
-        session.sql(f"""
+        _session.sql(f"""
             MERGE INTO {FQ_CLASSIFICATION_TABLE} AS tgt
             USING (
                 SELECT

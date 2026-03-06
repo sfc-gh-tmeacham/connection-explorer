@@ -14,11 +14,12 @@ logger = logging.getLogger(__name__)
 import pandas as pd
 import streamlit as st
 
+from components.client_mappings import CLIENT_ICON_FILES
 from components.setup import ensure_tables_exist
 
 
 @st.cache_data(show_spinner=False, ttl=3600)
-def get_current_account(session) -> str:
+def get_current_account(_session) -> str:
     """Return the current Snowflake account name.
 
     Cached for 1 hour.  Falls back to ``"SAMPLE_ACCOUNT"`` when no active
@@ -30,15 +31,15 @@ def get_current_account(session) -> str:
     Returns:
         The account name string.
     """
-    if session is not None:
+    if _session is not None:
         try:
-            return session.sql("SELECT CURRENT_ACCOUNT()").collect()[0][0]
+            return _session.sql("SELECT CURRENT_ACCOUNT()").collect()[0][0]
         except Exception:
             pass
     return "SAMPLE_ACCOUNT"
 
 
-def sample_dataframe(session) -> pd.DataFrame:
+def sample_dataframe(_session) -> pd.DataFrame:
     """Generate sample data for demo and local development.
 
     Models a realistic medallion architecture with multiple domain databases
@@ -61,7 +62,7 @@ def sample_dataframe(session) -> pd.DataFrame:
         A DataFrame with columns ORGANIZATION_NAME, ACCOUNT_NAME, DATABASE,
         WAREHOUSE, CLIENT, DIRECTION, and ACCESS_COUNT.
     """
-    current_account = get_current_account(session)
+    current_account = get_current_account(_session)
     org = "SAMPLE_ORG"
 
     # Each row: (DATABASE, WAREHOUSE, CLIENT, DIRECTION, ACCESS_COUNT)
@@ -279,7 +280,7 @@ def sample_dataframe(session) -> pd.DataFrame:
 
 
 @st.cache_data(show_spinner=False, ttl=300)
-def load_data(session) -> pd.DataFrame:
+def load_data(_session) -> pd.DataFrame:
     """Load access data from Snowflake or fall back to sample data.
 
     Attempts to query the ``data_lake_access_30d`` table via the provided
@@ -292,29 +293,29 @@ def load_data(session) -> pd.DataFrame:
     Returns:
         A DataFrame with the standard 7-column schema.
     """
-    if session is None:
+    if _session is None:
         logger.info("No Snowflake session — loading sample data")
-        return sample_dataframe(session)
+        return sample_dataframe(_session)
     try:
-        ensure_tables_exist(session)
+        ensure_tables_exist(_session)
         query = """
             SELECT account_id AS ACCOUNT_NAME, * 
-            FROM SNOWFLAKE_DATA_LAKE.DATA_LAKE_ACCESS.data_lake_access_30d 
+            FROM CONNECTION_EXPLORER_APP_DB.APP.data_lake_access_30d 
             ORDER BY access_count DESC;
         """
 
         logger.info("Querying Snowflake for access data")
-        result_df = session.sql(query).to_pandas()
+        result_df = _session.sql(query).to_pandas()
         if result_df.empty:
             logger.warning("Snowflake query returned empty — falling back to sample data")
             st.warning("No data found. Using sample data.")
-            return sample_dataframe(session)
+            return sample_dataframe(_session)
         logger.info("Loaded %d rows from Snowflake", len(result_df))
         return result_df
     except Exception as exc:
         logger.error("Snowflake query failed: %s", exc)
         st.error(f"Unable to query account usage data. Falling back to sample data.\n\nError: {exc}")
-        return sample_dataframe(session)
+        return sample_dataframe(_session)
 
 
 @st.cache_data(show_spinner=False)
@@ -336,6 +337,15 @@ def process_dataframe(df: pd.DataFrame) -> pd.DataFrame:
         return df
     df = df.dropna(how="any", axis=0)
     df = df.query("ACCESS_COUNT > 20")
+    # Clean up "Snowflake Web App (feature_name)" → show only the feature name
+    df = df.copy()
+    mask = df["CLIENT"].str.startswith("Snowflake Web App (")
+    extracted = df.loc[mask, "CLIENT"].str.extract(r'\(([^)]+)\)', expand=False)
+    # Register extracted names so they get the snowflake icon
+    for name in extracted.dropna().unique():
+        if name not in CLIENT_ICON_FILES:
+            CLIENT_ICON_FILES[name] = "snowflake.svg"
+    df.loc[mask, "CLIENT"] = extracted
     df = (
         df.groupby(
             ["DATABASE", "WAREHOUSE", "CLIENT", "DIRECTION", "ORGANIZATION_NAME", "ACCOUNT_NAME"],

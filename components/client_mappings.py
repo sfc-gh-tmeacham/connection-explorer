@@ -816,6 +816,8 @@ def generate_client_icon_uri(name: str) -> str:
 
     # Try to load a real brand icon
     icon_file = CLIENT_ICON_FILES.get(name)
+    if not icon_file and name.startswith("Snowflake Web"):
+        icon_file = CLIENT_ICON_FILES.get("Snowflake Web")
     svg_data = _load_svg_paths(icon_file) if icon_file else None
 
     if svg_data:

@@ -233,3 +233,11 @@ Gilbarbara logos come in two forms: base (often wide wordmarks) and `-icon` suff
 ### Most niche data tools have no open-source SVG icons
 
 Of 257 classified tools, only ~104 have brand SVG icons from open-source repos. The remaining ~150 are niche ETL, BI, or enterprise tools (Wherescape, Alooma, Attunity, Panoply, etc.) that don't appear in any major icon repository. The letter-abbreviation fallback is essential for coverage.
+
+### `IDENTIFIER()` does not support string concatenation for schema creation
+
+`CREATE SCHEMA IF NOT EXISTS IDENTIFIER($DB_NAME || '.APP')` fails because `IDENTIFIER()` expects a single object name, not a dot-qualified path built via concatenation. The fix is to `USE DATABASE IDENTIFIER($DB_NAME)` first, then `CREATE SCHEMA IF NOT EXISTS APP` without `IDENTIFIER()`.
+
+### `GRANT USAGE ON STREAMLIT` requires the app to exist first
+
+You cannot grant access to a Streamlit app in the same SQL setup script that runs before `snow streamlit deploy`. The Streamlit object is created by the deploy command, not by SQL. Move the `GRANT USAGE ON STREAMLIT` to the deploy script, after `snow streamlit deploy` succeeds.

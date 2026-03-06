@@ -100,7 +100,7 @@ def load_node_images() -> Dict[str, str]:
 
 
 def render_snowflake_header() -> None:
-    """Render the app header with the Data Lake Explorer title and Horizon Catalog badge.
+    """Render the app header with the Snowflake Connection Explorer title and Horizon Catalog badge.
 
     Injects an ``unsafe_allow_html`` markdown block containing the Snowflake
     bug logo, the app title, and the Horizon Catalog sub-header styled with
@@ -114,7 +114,7 @@ def render_snowflake_header() -> None:
             <h1 style="font-family: Lato, sans-serif; font-size: 32px; font-weight: 900; 
                        color: inherit; letter-spacing: 0.02em; line-height: 1.2; 
                        margin: 0; padding: 0; text-align: left;">
-                Data Lake Explorer
+                Snowflake Connection Explorer
             </h1>
             <div style="display: flex; align-items: center; gap: 8px; margin-top: 8px;">
                 <img src="data:image/svg+xml;base64,{logo_b64}" width="24" height="24" style="display: block;">
