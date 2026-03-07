@@ -161,7 +161,7 @@ Or run directly in Snowflake:
 - Table: `data_lake_access_30d` (transient table with 30-day access snapshot)
 - Stage: `STREAMLIT_STAGE` (for app deployment)
 - Procedure: `REFRESH_DATA_LAKE_ACCESS()` (uses INSERT OVERWRITE)
-- Task: `DATA_LAKE_ACCESS_REFRESH_TASK` (runs weekly on Sundays at 6am CST)
+- Task: `DATA_ACCESS_REFRESH_TASK` (runs weekly on Sundays at 6am CST)
 
 **Data collected:**
 - Organization name and account name

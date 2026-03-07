@@ -55,7 +55,7 @@ echo Keep Database: %KEEP_DATABASE%
 echo.
 echo This will remove:
 echo   - Streamlit app: SNOWFLAKE_CONNECTION_EXPLORER
-echo   - Task: DATA_LAKE_ACCESS_REFRESH_TASK
+echo   - Task: DATA_ACCESS_REFRESH_TASK
 echo   - Procedure: REFRESH_DATA_LAKE_ACCESS
 echo   - Table: data_lake_access_30d
 echo   - Stage: STREAMLIT_STAGE
@@ -76,8 +76,8 @@ if errorlevel 1 echo Warning: Could not drop Streamlit app
 
 echo.
 echo [2/4] Suspending and dropping task...
-snow sql --connection %CONNECTION% -q "ALTER TASK IF EXISTS CONNECTION_EXPLORER_APP_DB.APP.DATA_LAKE_ACCESS_REFRESH_TASK SUSPEND;"
-snow sql --connection %CONNECTION% -q "DROP TASK IF EXISTS CONNECTION_EXPLORER_APP_DB.APP.DATA_LAKE_ACCESS_REFRESH_TASK;"
+snow sql --connection %CONNECTION% -q "ALTER TASK IF EXISTS CONNECTION_EXPLORER_APP_DB.APP.DATA_ACCESS_REFRESH_TASK SUSPEND;"
+snow sql --connection %CONNECTION% -q "DROP TASK IF EXISTS CONNECTION_EXPLORER_APP_DB.APP.DATA_ACCESS_REFRESH_TASK;"
 if errorlevel 1 echo Warning: Could not drop task
 
 echo.
@@ -103,4 +103,4 @@ echo.
 echo All Snowflake Connection Explorer objects have been removed.
 echo.
 
-endlocal
+endl

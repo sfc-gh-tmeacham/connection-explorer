@@ -198,10 +198,10 @@ END;
 $$;
 
 -- Suspend the task if it already exists (required before CREATE OR ALTER)
-ALTER TASK IF EXISTS DATA_LAKE_ACCESS_REFRESH_TASK SUSPEND;
+ALTER TASK IF EXISTS DATA_ACCESS_REFRESH_TASK SUSPEND;
 
 -- Create or update the refresh task that calls the stored procedure
-CREATE OR ALTER TASK DATA_LAKE_ACCESS_REFRESH_TASK
+CREATE OR ALTER TASK DATA_ACCESS_REFRESH_TASK
   WAREHOUSE = IDENTIFIER($WH_NAME)
   SCHEDULE = 'USING CRON 0 6 * * 0 America/Chicago'
   COMMENT = 'Refreshes data lake access data every Sunday at 6am CST'
@@ -209,7 +209,7 @@ AS
   CALL REFRESH_DATA_LAKE_ACCESS();
 
 -- Resume the task so it runs on schedule
-ALTER TASK DATA_LAKE_ACCESS_REFRESH_TASK RESUME;
+ALTER TASK DATA_ACCESS_REFRESH_TASK RESUME;
 
 -- Execute the procedure immediately to populate initial data
 CALL REFRESH_DATA_LAKE_ACCESS();
