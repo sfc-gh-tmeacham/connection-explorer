@@ -16,9 +16,10 @@
 - [Installation](#installation)
 - [Running Locally](#running-locally)
 - [Deploying to Snowflake](#deploying-to-snowflake-streamlit-in-snowflake)
-  - [Quick Deploy](#quick-deploy-recommended)
-  - [Manual Deployment](#manual-deployment)
-  - [Customizing the Warehouse](#customizing-the-warehouse)
+  - [Prerequisites](#prerequisites-all-methods)
+  - [Option 1: Quick Deploy with Snowflake CLI](#option-1-quick-deploy-with-snowflake-cli-recommended)
+  - [Option 2: Manual Deploy with Snowflake CLI](#option-2-manual-deploy-with-snowflake-cli)
+  - [Option 3: Deploy via Snowsight](#option-3-deploy-via-snowsight-no-cli-required)
 - [Uninstalling](#uninstalling)
 - [Architecture: Connection Strategy](#architecture-connection-strategy)
 - [Project Structure](#project-structure)
@@ -114,106 +115,151 @@ The app will open in your browser at `http://localhost:8501`
 
 ## Deploying to Snowflake (Streamlit in Snowflake)
 
-### Prerequisites
-- [Snowflake CLI](https://docs.snowflake.com/en/developer-guide/snowflake-cli) (`snow`) installed
-- Snowflake account with a role that has the [required privileges](#roles-and-privileges)
-- A warehouse for running queries
+> This app targets the **Streamlit container runtime** (Preview). It runs as a long-lived service on a compute pool, shared across all viewers, with packages installed from PyPI via `pyproject.toml`.
 
-### Quick Deploy (Recommended)
+### Prerequisites (All Methods)
 
-The easiest way to deploy is using the automated deployment scripts:
+**Snowflake account requirements:**
+- A role with privileges to create databases, warehouses, compute pools, and integrations (default: `ACCOUNTADMIN`). See [Roles and Privileges](#roles-and-privileges) for details.
+- `IMPORTED PRIVILEGES` on the shared `SNOWFLAKE` database (for `account_usage` views).
 
-**Mac/Linux:**
-```bash
-# Configure your Snowflake connection (one-time setup)
-snow connection add
+**Review deployment variables** before running the setup SQL. Open `deploy/snowflake_data_set_up.sql` and check the variables at the top:
 
-# Deploy everything
-./deploy/deploy.sh <connection_name> [warehouse_name]
-
-# Example:
-./deploy/deploy.sh my_snowflake_connection COMPUTE_WH
+```sql
+SET DB_NAME = 'CONNECTION_EXPLORER_APP_DB';        -- Database name
+SET WH_NAME = 'CONNECTION_EXPLORER_WH';            -- Query warehouse
+SET COMPUTE_POOL_NAME = 'STREAMLIT_COMPUTE_POOL';  -- Compute pool for container runtime
+SET EAI_NAME = 'PYPI_ACCESS_INTEGRATION';          -- External access integration for PyPI
+SET DEPLOY_ROLE = 'ACCOUNTADMIN';                  -- Role that runs the setup
+SET APP_OWNER_ROLE = 'SYSADMIN';                   -- Role that owns the app at runtime
 ```
 
-**Windows:**
-```cmd
-REM Configure your Snowflake connection (one-time setup)
-snow connection add
+> **Important:** If you change `WH_NAME`, `COMPUTE_POOL_NAME`, or `EAI_NAME`, you must also update the matching values in `snowflake.yml` (`query_warehouse`, `compute_pool`, and `external_access_integrations`). The deploy scripts (`deploy.sh` / `deploy.bat`) also hardcode the database name and schema — update those too if you change `DB_NAME`.
 
-REM Deploy everything
-deploy\deploy.bat <connection_name> [warehouse_name]
-
-REM Example:
-deploy\deploy.bat my_snowflake_connection COMPUTE_WH
-```
-
-The deployment script will:
-1. Create the database and schema (default: `CONNECTION_EXPLORER_APP_DB.APP`, configurable in the setup SQL)
-2. Create the transient data table and refresh stored procedure
-3. Execute the procedure to load initial 30-day access data
-4. Deploy the Streamlit app
+**What the setup SQL creates:**
+- Database, schema, warehouse, compute pool, and external access integration
+- Tables: `CONNECTION_ACCESS_30D` (transient) and `CLIENT_APP_CLASSIFICATION`
+- Stage: `STREAMLIT_STAGE`
+- Stored procedure: `REFRESH_CONNECTION_ACCESS()`
+- Serverless task: `DATA_ACCESS_REFRESH_TASK` (runs weekly, Sundays 6am CST)
+- Role grants for the app owner role
 
 > **Note:** At runtime, the app detects its database and schema from the active session (`CURRENT_DATABASE()` / `CURRENT_SCHEMA()`), so it works regardless of what names you choose during deployment.
 
-### Manual Deployment
+---
 
-If you prefer step-by-step deployment:
+### Option 1: Quick Deploy with Snowflake CLI (Recommended)
 
-#### Step 1: Set up the Database and Data Pipeline
+The fastest path. Requires [Snowflake CLI](https://docs.snowflake.com/en/developer-guide/snowflake-cli) v3.14+.
 
-Run the setup script to create the database, schema, table, and scheduled refresh task:
+**Step 1:** Configure your Snowflake connection (one-time):
+```bash
+snow connection add
+```
 
+**Step 2:** Run the deploy script:
+
+*Mac/Linux:*
+```bash
+./deploy/deploy.sh <connection_name>
+```
+
+*Windows:*
+```cmd
+deploy\deploy.bat <connection_name>
+```
+
+The script will:
+1. Run `snowflake_data_set_up.sql` to create all infrastructure and load initial data
+2. Deploy the Streamlit app via `snow streamlit deploy` (reads `snowflake.yml` for container runtime config)
+3. Grant the app owner role (`SYSADMIN`) access to the Streamlit app
+
+**Step 3:** Open the app in Snowsight: **Projects** > **Streamlit** > **SNOWFLAKE_CONNECTION_EXPLORER**
+
+---
+
+### Option 2: Manual Deploy with Snowflake CLI
+
+For more control over each step. Requires [Snowflake CLI](https://docs.snowflake.com/en/developer-guide/snowflake-cli) v3.14+.
+
+**Step 1:** Review and edit the variables in `deploy/snowflake_data_set_up.sql` (see [Prerequisites](#prerequisites-all-methods) above).
+
+**Step 2:** Run the setup SQL to create infrastructure and load data:
 ```bash
 snow sql --connection <connection_name> \
     --filename deploy/snowflake_data_set_up.sql \
-    --warehouse <warehouse_name>
+    --warehouse CONNECTION_EXPLORER_WH
 ```
 
-Or run directly in Snowflake:
-```sql
--- Open deploy/snowflake_data_set_up.sql in Snowsight and execute
-```
-
-**What `snowflake_data_set_up.sql` creates** (names are configurable via variables at the top of the script):
-- Database: `CONNECTION_EXPLORER_APP_DB` (default)
-- Schema: `APP` (default)
-- Table: `CONNECTION_ACCESS_30D` (transient table with 30-day access snapshot)
-- Stage: `STREAMLIT_STAGE` (for app deployment)
-- Procedure: `REFRESH_CONNECTION_ACCESS()` (uses INSERT OVERWRITE)
-- Task: `DATA_ACCESS_REFRESH_TASK` (runs weekly on Sundays at 6am CST)
-
-**Data collected:**
-- Organization name and account name
-- Client application, warehouse, database, and fully-qualified schema name
-- Access direction:
-  - **read**: SELECT, UNLOAD, GET_FILES
-  - **write**: INSERT, UPDATE, DELETE, MERGE, COPY, PUT_FILES, COPY_FILES, REMOVE_FILES
-  - **DDL**: CREATE, ALTER, DROP, TRUNCATE, RENAME, UNDROP, COMMENT, GRANT, REVOKE, RESTORE
-  - **metadata**: SHOW, DESCRIBE, LIST_FILES, EXPLAIN
-- Access count per combination
-- Excludes: personal databases (`USER$%`), system clients, session/transaction commands
-
-**Performance optimizations:**
-- Uses split-join pattern for client classification to handle high query volumes efficiently
-- Transient table with INSERT OVERWRITE for atomic refreshes without time travel overhead
-
-#### Step 2: Deploy the Streamlit App
-
+**Step 3:** Deploy the Streamlit app (uses `snowflake.yml` for container runtime settings):
 ```bash
 snow streamlit deploy \
     --connection <connection_name> \
-    --database <your_database> \
-    --schema <your_schema> \
+    --database CONNECTION_EXPLORER_APP_DB \
+    --schema APP \
     --replace
 ```
 
-### Customizing the Warehouse
-
-By default, the refresh task uses `CONNECTION_EXPLORER_WH`. To change this, edit `deploy/snowflake_data_set_up.sql` before deployment:
-
-```sql
-SET WH_NAME = 'YOUR_WAREHOUSE_NAME';  -- Change this
+**Step 4:** Grant the app owner role access to the deployed app:
+```bash
+snow sql --connection <connection_name> \
+    --warehouse CONNECTION_EXPLORER_WH \
+    --query "GRANT USAGE ON STREAMLIT CONNECTION_EXPLORER_APP_DB.APP.SNOWFLAKE_CONNECTION_EXPLORER TO ROLE SYSADMIN"
 ```
+
+**Step 5:** Open the app in Snowsight: **Projects** > **Streamlit** > **SNOWFLAKE_CONNECTION_EXPLORER**
+
+---
+
+### Option 3: Deploy via Snowsight (No CLI Required)
+
+Deploy entirely through the Snowflake web UI. No local tooling needed — just a browser.
+
+**Step 1:** Review the variables at the top of `deploy/snowflake_data_set_up.sql` (see [Prerequisites](#prerequisites-all-methods) above). Edit them if needed.
+
+**Step 2:** Run the setup SQL in Snowsight:
+1. Sign in to [Snowsight](https://app.snowflake.com)
+2. Open a **SQL Worksheet**
+3. Set the role to `ACCOUNTADMIN` (or your deploy role)
+4. Paste the contents of `deploy/snowflake_data_set_up.sql` and run all statements
+5. Verify the infrastructure was created: `SHOW TABLES IN CONNECTION_EXPLORER_APP_DB.APP;`
+
+**Step 3:** Create the Streamlit app:
+1. Navigate to **Projects** > **Streamlit**
+2. Click **+ Streamlit App**
+3. Configure the app:
+   - **App name**: `SNOWFLAKE_CONNECTION_EXPLORER`
+   - **App location**: Database `CONNECTION_EXPLORER_APP_DB`, Schema `APP`
+   - **App warehouse** (query warehouse): `CONNECTION_EXPLORER_WH`
+   - **Python environment**: Select **Run on container**
+   - **Compute pool**: `STREAMLIT_COMPUTE_POOL`
+4. Click **Create** — Snowsight opens the app editor with default starter code
+
+**Step 4:** Upload the app files. In the Snowsight editor, use **+ (Add)** > **Upload file** to upload each file, preserving the directory structure:
+
+| Files | Path in editor |
+|-------|---------------|
+| `streamlit_app.py` | `streamlit_app.py` (root) |
+| `pyproject.toml` | `pyproject.toml` (root) |
+| `components/__init__.py`, `theme.py`, `assets.py`, `data.py`, `network.py`, `charts.py`, `client_mappings.py`, `setup.py` | `components/` |
+| `views/__init__.py`, `network.py`, `charts.py`, `data.py`, `classifications.py` | `views/` |
+| All `.svg` files in `static/` and `static/client-icons/` | `static/` and `static/client-icons/` |
+
+> **Tip:** Upload `streamlit_app.py` last (or click **Run** after all files are uploaded) to avoid partial-load errors.
+
+**Step 5:** Add the external access integration for PyPI packages:
+1. In the app editor, click the **vertical ellipsis menu** (upper-right) > **App settings**
+2. Under **External access**, add `PYPI_ACCESS_INTEGRATION`
+3. Click **Save**
+
+The app will reboot and install packages from `pyproject.toml`. This may take a few minutes on first deploy.
+
+**Step 6:** Grant the app owner role access. In a SQL Worksheet:
+```sql
+GRANT USAGE ON STREAMLIT CONNECTION_EXPLORER_APP_DB.APP.SNOWFLAKE_CONNECTION_EXPLORER TO ROLE SYSADMIN;
+```
+
+**Step 7:** Verify the app loads at **Projects** > **Streamlit** > **SNOWFLAKE_CONNECTION_EXPLORER**
 
 ## Uninstalling
 
@@ -334,19 +380,10 @@ These resources must exist **before** deployment:
 | Resource | Purpose | Notes |
 |----------|---------|-------|
 | `SNOWFLAKE` database | Source data (`account_usage` views) | Shared database present in every Snowflake account. Requires `IMPORTED PRIVILEGES` grant. |
-| `PYPI_ACCESS_INTEGRATION` | External access integration | Required for Streamlit in Snowflake to install Python packages from PyPI. Must be created by an account admin if it doesn't already exist. |
 
 #### Customizing Resource Names
 
-Edit the variables at the top of `deploy/snowflake_data_set_up.sql`:
-
-```sql
-SET DB_NAME = 'CONNECTION_EXPLORER_APP_DB';    -- Database name
-SET WH_NAME = 'CONNECTION_EXPLORER_WH';        -- Warehouse name
-SET COMPUTE_POOL_NAME = 'STREAMLIT_COMPUTE_POOL'; -- Compute pool name
-SET DEPLOY_ROLE = 'ACCOUNTADMIN';              -- Role that runs the setup
-SET APP_OWNER_ROLE = 'SYSADMIN';               -- Role that owns the app at runtime
-```
+All resource names are configurable via variables at the top of `deploy/snowflake_data_set_up.sql`. See [Prerequisites (All Methods)](#prerequisites-all-methods) for the full list and instructions on keeping `snowflake.yml` and deploy scripts in sync.
 
 ### Roles and Privileges
 
