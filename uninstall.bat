@@ -56,8 +56,8 @@ echo.
 echo This will remove:
 echo   - Streamlit app: SNOWFLAKE_CONNECTION_EXPLORER
 echo   - Task: DATA_ACCESS_REFRESH_TASK
-echo   - Procedure: REFRESH_DATA_LAKE_ACCESS
-echo   - Table: data_lake_access_30d
+echo   - Procedure: REFRESH_CONNECTION_ACCESS
+echo   - Table: connection_access_30d
 echo   - Stage: STREAMLIT_STAGE
 echo   - Schema: APP
 if "%KEEP_DATABASE%"=="false" echo   - Database: CONNECTION_EXPLORER_APP_DB
@@ -82,8 +82,8 @@ if errorlevel 1 echo Warning: Could not drop task
 
 echo.
 echo [3/4] Dropping procedure, table, and stage...
-snow sql --connection %CONNECTION% -q "DROP PROCEDURE IF EXISTS CONNECTION_EXPLORER_APP_DB.APP.REFRESH_DATA_LAKE_ACCESS();"
-snow sql --connection %CONNECTION% -q "DROP TABLE IF EXISTS CONNECTION_EXPLORER_APP_DB.APP.data_lake_access_30d;"
+snow sql --connection %CONNECTION% -q "DROP PROCEDURE IF EXISTS CONNECTION_EXPLORER_APP_DB.APP.REFRESH_CONNECTION_ACCESS();"
+snow sql --connection %CONNECTION% -q "DROP TABLE IF EXISTS CONNECTION_EXPLORER_APP_DB.APP.connection_access_30d;"
 snow sql --connection %CONNECTION% -q "DROP STAGE IF EXISTS CONNECTION_EXPLORER_APP_DB.APP.STREAMLIT_STAGE;"
 
 echo.

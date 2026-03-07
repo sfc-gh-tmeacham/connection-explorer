@@ -284,7 +284,7 @@ def sample_dataframe(_session) -> pd.DataFrame:
 def load_data(_session) -> pd.DataFrame:
     """Load access data from Snowflake or fall back to sample data.
 
-    Attempts to query the ``data_lake_access_30d`` table via the provided
+    Attempts to query the ``connection_access_30d`` table via the provided
     Snowpark session.  On failure (no session, empty result, or SQL error)
     returns ``sample_dataframe()`` instead.  Cached for 5 minutes.
 
@@ -301,7 +301,7 @@ def load_data(_session) -> pd.DataFrame:
         ensure_tables_exist(_session)
         query = """
             SELECT account_id AS ACCOUNT_NAME, * 
-            FROM CONNECTION_EXPLORER_APP_DB.APP.data_lake_access_30d 
+            FROM CONNECTION_EXPLORER_APP_DB.APP.connection_access_30d 
             ORDER BY access_count DESC;
         """
 

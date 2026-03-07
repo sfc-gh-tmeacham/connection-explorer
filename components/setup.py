@@ -1,7 +1,7 @@
 """Auto-setup: create and seed Snowflake objects on first run.
 
 Creates the ``CONNECTION_EXPLORER_APP_DB.APP`` schema, the
-``data_lake_access_30d`` access table, and the ``client_app_classification``
+``connection_access_30d`` access table, and the ``client_app_classification``
 lookup table if they do not already exist.  The classification table is
 seeded via MERGE from ``CLIENT_MAPPINGS`` so re-runs are idempotent.
 """
@@ -17,7 +17,7 @@ from components.client_mappings import CLIENT_MAPPINGS
 DB = "CONNECTION_EXPLORER_APP_DB"
 SCHEMA = "APP"
 FQ_SCHEMA = f"{DB}.{SCHEMA}"
-FQ_ACCESS_TABLE = f"{FQ_SCHEMA}.data_lake_access_30d"
+FQ_ACCESS_TABLE = f"{FQ_SCHEMA}.connection_access_30d"
 FQ_CLASSIFICATION_TABLE = f"{FQ_SCHEMA}.client_app_classification"
 
 

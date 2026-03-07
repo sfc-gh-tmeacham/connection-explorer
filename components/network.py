@@ -949,7 +949,7 @@ export default function(component) {
 
                         // Trigger download
                         var link = document.createElement('a');
-                        link.download = 'data-lake-network.png';
+                        link.download = 'connection-network.png';
                         link.href = exportCanvas.toDataURL('image/png');
                         link.click();
                     } catch(e) {
@@ -1012,7 +1012,7 @@ def _get_component():
         Streamlit page and returns a ``BidiComponentResult``.
     """
     return st.components.v2.component(
-        "data_lake_network",
+        "connection_network",
         html=_COMPONENT_HTML,
         css=_COMPONENT_CSS,
         js=_build_js(),

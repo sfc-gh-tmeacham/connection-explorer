@@ -51,7 +51,7 @@ CREATE STAGE IF NOT EXISTS STREAMLIT_STAGE
     DIRECTORY = (ENABLE = TRUE);
 
 -- Create the table to store 30-day access snapshot (transient - no time travel/fail-safe needed)
-CREATE TRANSIENT TABLE IF NOT EXISTS data_lake_access_30d (
+CREATE TRANSIENT TABLE IF NOT EXISTS connection_access_30d (
     organization_name VARCHAR,
     account_id VARCHAR,
     client VARCHAR,
@@ -63,7 +63,7 @@ CREATE TRANSIENT TABLE IF NOT EXISTS data_lake_access_30d (
 );
 
 -- Add schema_name column if upgrading from an older version of the table
-ALTER TABLE IF EXISTS data_lake_access_30d ADD COLUMN IF NOT EXISTS schema_name VARCHAR;
+ALTER TABLE IF EXISTS connection_access_30d ADD COLUMN IF NOT EXISTS schema_name VARCHAR;
 
 -- Create the client application classification lookup table
 -- Seeded automatically by the Streamlit app from components/client_mappings.py.
@@ -80,7 +80,7 @@ CREATE TABLE IF NOT EXISTS client_app_classification (
 -- Logging requires an event table configured at the account level:
 --   CREATE EVENT TABLE IF NOT EXISTS <db>.<schema>.<table>;
 --   ALTER ACCOUNT SET EVENT_TABLE = '<db>.<schema>.<table>';
-CREATE OR ALTER PROCEDURE REFRESH_DATA_LAKE_ACCESS()
+CREATE OR ALTER PROCEDURE REFRESH_CONNECTION_ACCESS()
 RETURNS STRING
 LANGUAGE SQL
 AS
@@ -89,7 +89,7 @@ DECLARE
     row_count INTEGER;
     result_msg VARCHAR;
 BEGIN
-    SYSTEM$LOG_INFO('REFRESH_DATA_LAKE_ACCESS: Starting data refresh');
+    SYSTEM$LOG_INFO('REFRESH_CONNECTION_ACCESS: Starting data refresh');
 
     /*
      * Pipeline overview
@@ -133,7 +133,7 @@ BEGIN
      *                       distinct query counts per route.
      */
 
-    INSERT OVERWRITE INTO data_lake_access_30d (
+    INSERT OVERWRITE INTO connection_access_30d (
         organization_name, account_id, client, warehouse, 
         database, schema_name, direction, access_count
     )
@@ -248,19 +248,19 @@ BEGIN
     GROUP BY ALL;
 
     -- Log the row count after the refresh
-    SELECT COUNT(*) INTO :row_count FROM data_lake_access_30d;
-    result_msg := 'Data lake access data refreshed successfully. Rows: ' || :row_count;
-    SYSTEM$LOG_INFO('REFRESH_DATA_LAKE_ACCESS: ' || :result_msg);
+    SELECT COUNT(*) INTO :row_count FROM connection_access_30d;
+    result_msg := 'Connection access data refreshed successfully. Rows: ' || :row_count;
+    SYSTEM$LOG_INFO('REFRESH_CONNECTION_ACCESS: ' || :result_msg);
     RETURN result_msg;
 EXCEPTION
     WHEN OTHER THEN
-        SYSTEM$LOG_ERROR('REFRESH_DATA_LAKE_ACCESS: Failed with SQLCODE=' || :SQLCODE || ' — ' || :SQLERRM);
+        SYSTEM$LOG_ERROR('REFRESH_CONNECTION_ACCESS: Failed with SQLCODE=' || :SQLCODE || ' — ' || :SQLERRM);
         RAISE;
 END;
 $$;
 
 -- Enable INFO-level logging so SYSTEM$LOG_INFO messages are captured
-ALTER PROCEDURE REFRESH_DATA_LAKE_ACCESS() SET LOG_LEVEL = INFO;
+ALTER PROCEDURE REFRESH_CONNECTION_ACCESS() SET LOG_LEVEL = INFO;
 
 -- Suspend the task if it already exists (required before CREATE OR ALTER)
 ALTER TASK IF EXISTS DATA_ACCESS_REFRESH_TASK SUSPEND;
@@ -290,7 +290,7 @@ ALTER TASK IF EXISTS DATA_ACCESS_REFRESH_TASK SUSPEND;
 -- This populates the RETURN_VALUE column in TASK_HISTORY() output.
 CREATE OR ALTER TASK DATA_ACCESS_REFRESH_TASK
   SCHEDULE = 'USING CRON 0 6 * * 0 America/Chicago'
-  COMMENT = 'Refreshes data lake access data every Sunday at 6am CST'
+  COMMENT = 'Refreshes connection access data every Sunday at 6am CST'
 AS
   EXECUTE IMMEDIATE
   $$
@@ -298,7 +298,7 @@ AS
     result VARCHAR;  -- holds the procedure's return message (e.g. "... Rows: 59")
   BEGIN
     -- Run the refresh; captures the RETURN string into :result
-    CALL REFRESH_DATA_LAKE_ACCESS() INTO :result;
+    CALL REFRESH_CONNECTION_ACCESS() INTO :result;
     -- Surface the result in TASK_HISTORY().RETURN_VALUE
     CALL SYSTEM$SET_RETURN_VALUE(:result);
   END;
@@ -308,7 +308,7 @@ AS
 ALTER TASK DATA_ACCESS_REFRESH_TASK RESUME;
 
 -- Execute the procedure immediately to populate initial data
-CALL REFRESH_DATA_LAKE_ACCESS();
+CALL REFRESH_CONNECTION_ACCESS();
 
 -- Grant access to the app owner role
 GRANT USAGE ON DATABASE IDENTIFIER($DB_NAME) TO ROLE IDENTIFIER($APP_OWNER_ROLE);
@@ -322,7 +322,7 @@ GRANT UPDATE ON ALL TABLES IN SCHEMA APP TO ROLE IDENTIFIER($APP_OWNER_ROLE);
 GRANT USAGE ON WAREHOUSE IDENTIFIER($WH_NAME) TO ROLE IDENTIFIER($APP_OWNER_ROLE);
 GRANT USAGE ON COMPUTE POOL IDENTIFIER($COMPUTE_POOL_NAME) TO ROLE IDENTIFIER($APP_OWNER_ROLE);
 GRANT USAGE ON INTEGRATION PYPI_ACCESS_INTEGRATION TO ROLE IDENTIFIER($APP_OWNER_ROLE);
-GRANT USAGE ON PROCEDURE REFRESH_DATA_LAKE_ACCESS() TO ROLE IDENTIFIER($APP_OWNER_ROLE);
+GRANT USAGE ON PROCEDURE REFRESH_CONNECTION_ACCESS() TO ROLE IDENTIFIER($APP_OWNER_ROLE);
 GRANT OPERATE ON TASK DATA_ACCESS_REFRESH_TASK TO ROLE IDENTIFIER($APP_OWNER_ROLE);
 GRANT EXECUTE MANAGED TASK ON ACCOUNT TO ROLE IDENTIFIER($APP_OWNER_ROLE);
 -- NOTE: The GRANT USAGE ON STREAMLIT is handled by the deploy script

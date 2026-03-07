@@ -78,7 +78,7 @@ cd data-lake-explorer
 
 # Create conda environment
 conda env create -f environment.yml
-conda activate streamlit-data-lake-explorer
+conda activate streamlit-connection-explorer
 ```
 
 ## Running Locally
@@ -94,6 +94,35 @@ streamlit run streamlit_app.py
 The app will open in your browser at `http://localhost:8501`
 
 **Note**: Without a Snowflake connection, the app will display sample data for demonstration purposes.
+
+## How the App Connects to Snowflake
+
+The app uses a three-tier connection strategy that adapts to wherever it's running:
+
+| Environment | Connection Method | Configuration |
+|---|---|---|
+| **Streamlit in Snowflake** | `get_active_session()` — Snowflake auto-injects a pre-authenticated Snowpark session into the container runtime | None required; inherits role and warehouse from the Streamlit app object |
+| **Local with credentials** | `st.connection("snowflake")` — Streamlit's built-in Snowflake connector reads from `.streamlit/secrets.toml` | Requires `.streamlit/secrets.toml` with account, user, and authentication details |
+| **Local without credentials** | `session = None` — falls back to synthetic sample data | No configuration needed; the app runs in demo mode |
+
+The logic lives in `streamlit_app.py` and executes on startup:
+
+```python
+try:
+    from snowflake.snowpark.context import get_active_session
+    session = get_active_session()
+except Exception:
+    try:
+        conn = st.connection("snowflake")
+        session = conn.session()
+    except Exception:
+        session = None
+```
+
+**Key points:**
+- When deployed to Snowflake, there are **no credentials to manage** — the platform handles authentication transparently via `get_active_session()`
+- The app never uses raw `snowflake.connector` or `Session.builder` — all queries go through the Snowpark session
+- All data access uses `session.sql(...).to_pandas()` to execute SQL and return DataFrames
 
 ## Deploying to Snowflake (Streamlit in Snowflake)
 
@@ -158,9 +187,9 @@ Or run directly in Snowflake:
 **What `snowflake_data_set_up.sql` creates:**
 - Database: `CONNECTION_EXPLORER_APP_DB`
 - Schema: `APP`
-- Table: `data_lake_access_30d` (transient table with 30-day access snapshot)
+- Table: `connection_access_30d` (transient table with 30-day access snapshot)
 - Stage: `STREAMLIT_STAGE` (for app deployment)
-- Procedure: `REFRESH_DATA_LAKE_ACCESS()` (uses INSERT OVERWRITE)
+- Procedure: `REFRESH_CONNECTION_ACCESS()` (uses INSERT OVERWRITE)
 - Task: `DATA_ACCESS_REFRESH_TASK` (runs weekly on Sundays at 6am CST)
 
 **Data collected:**
@@ -280,7 +309,7 @@ The app queries data from `snowflake.account_usage` views:
 > GRANT IMPORTED PRIVILEGES ON DATABASE SNOWFLAKE TO ROLE <your_role>;
 > ```
 
-The refresh procedure pre-aggregates this data into `CONNECTION_EXPLORER_APP_DB.APP.data_lake_access_30d` for fast dashboard performance.
+The refresh procedure pre-aggregates this data into `CONNECTION_EXPLORER_APP_DB.APP.connection_access_30d` for fast dashboard performance.
 
 ### Client Application Mappings
 
@@ -300,3 +329,4 @@ See [LICENSE](LICENSE) file.
 - [vis.js](https://visjs.org/) - Interactive network graph visualization
 - [Plotly](https://plotly.com/python/) - Charts (bar, Sankey, heatmap, treemap)
 - [Snowpark for Python](https://docs.snowflake.com/en/developer-guide/snowpark/python/index) - Snowflake connectivity
+- [Cortex Code CLI](https://docs.snowflake.com/en/user-guide/cortex-code/cortex-code) - AI-powered development assistant

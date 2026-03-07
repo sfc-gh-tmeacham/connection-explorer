@@ -1,5 +1,5 @@
 [project]
-name = "data-lake-explorer"
+name = "connection-explorer"
 version = "0.1.0"
 description = "Snowflake Data Lake Access Visualization"
 requires-python = ">=3.11"
