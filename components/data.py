@@ -323,8 +323,7 @@ def load_data(_session) -> pd.DataFrame:
 def process_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     """Clean and aggregate the raw access DataFrame.
 
-    Drops rows with any null values, filters out rows with
-    ``ACCESS_COUNT <= 20``, and groups by the core dimensions to produce
+    Drops rows with any null values and groups by the core dimensions to produce
     a single summed ACCESS_COUNT per unique combination.
 
     Args:
@@ -337,7 +336,6 @@ def process_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
         return df
     df = df.dropna(how="any", axis=0)
-    df = df.query("ACCESS_COUNT > 20")
     # Clean up "Snowflake Web App (feature_name)" → show only the feature name
     df = df.copy()
     mask = df["CLIENT"].str.startswith("Snowflake Web App (")

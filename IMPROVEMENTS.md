@@ -18,11 +18,11 @@
 
 - [x] **Local Snowflake Connectivity** — Added `.streamlit/secrets.toml` support with PAT (Personal Access Token) authentication for local development.
 
+- [x] **`process_dataframe` Silently Drops Rows** — Removed the hardcoded `ACCESS_COUNT > 20` filter. Users now have full control via the UI's "Access Count Limit" filter.
+
 ## Open
 
 - [ ] **No Tests** — Zero test coverage. The data processing, filtering, and client classification logic are all testable but untested.
-
-- [ ] **`process_dataframe` Silently Drops Rows** — `df.query("ACCESS_COUNT > 20")` in `components/data.py:330` uses a hardcoded threshold separate from the user-facing "Access Count Limit" filter. Users have no visibility into this hidden cutoff.
 
 - [ ] **Missing Date/Time Context** — The data covers 30 days but there is no date column exposed in the UI. Users cannot see trends over time or filter by date range.
 
