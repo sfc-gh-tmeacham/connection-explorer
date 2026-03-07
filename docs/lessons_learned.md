@@ -364,3 +364,30 @@ Snowflake SQL stored procedures support `SYSTEM$LOG_INFO()`, `SYSTEM$LOG_ERROR()
 2. **LOG_LEVEL**: Set on the procedure via `ALTER PROCEDURE ... SET LOG_LEVEL = INFO` to control which severity levels are captured.
 3. **EXCEPTION block**: Wrap the procedure body in `BEGIN ... EXCEPTION WHEN OTHER THEN ... END` to log errors before re-raising. Use `:SQLCODE` and `:SQLERRM` (with colon prefix) to access error details.
 4. **Variable references in SQL**: Inside `SELECT ... INTO :var` and string concatenation, variables declared in `DECLARE` must use the colon prefix (`:row_count`, `:result_msg`).
+
+### `SYSTEM$SET_RETURN_VALUE` is a side-effect function — it cannot run inside a stored procedure
+
+`SYSTEM$SET_RETURN_VALUE` sets the return value visible in `TASK_HISTORY()`. It **must** be called in the task execution context (the task body), not inside a stored procedure invoked by the task. Attempts to call it from within a procedure fail with:
+
+- **Bare statement**: `SYSTEM$SET_RETURN_VALUE(:msg);` → "cannot be executed as a statement in Snowscript"
+- **SELECT wrapper**: `SELECT SYSTEM$SET_RETURN_VALUE(:msg);` → "contains a function with side effects"
+- **CALL wrapper**: `CALL SYSTEM$SET_RETURN_VALUE(:msg);` → same side-effects error (still inside a procedure context)
+
+The solution is to call the procedure from the task body, capture its return value, and then call `SYSTEM$SET_RETURN_VALUE` at the task level. Use `EXECUTE IMMEDIATE` with `$$` delimiters to embed a multi-statement anonymous block as a single task body:
+
+```sql
+CREATE OR ALTER TASK my_task
+  SCHEDULE = '...'
+AS
+  EXECUTE IMMEDIATE
+  $$
+  DECLARE
+    result VARCHAR;
+  BEGIN
+    CALL my_procedure() INTO :result;
+    CALL SYSTEM$SET_RETURN_VALUE(:result);
+  END;
+  $$;
+```
+
+The `EXECUTE IMMEDIATE` + `$$` pattern is necessary because `CREATE TASK ... AS` expects a single SQL statement, and the anonymous `DECLARE`/`BEGIN`/`END` block contains semicolons that confuse the parser without dollar-quote delimiters.

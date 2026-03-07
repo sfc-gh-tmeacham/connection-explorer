@@ -251,7 +251,6 @@ BEGIN
     SELECT COUNT(*) INTO :row_count FROM data_lake_access_30d;
     result_msg := 'Data lake access data refreshed successfully. Rows: ' || :row_count;
     SYSTEM$LOG_INFO('REFRESH_DATA_LAKE_ACCESS: ' || :result_msg);
-
     RETURN result_msg;
 EXCEPTION
     WHEN OTHER THEN
@@ -266,13 +265,44 @@ ALTER PROCEDURE REFRESH_DATA_LAKE_ACCESS() SET LOG_LEVEL = INFO;
 -- Suspend the task if it already exists (required before CREATE OR ALTER)
 ALTER TASK IF EXISTS DATA_ACCESS_REFRESH_TASK SUSPEND;
 
--- Create or update the refresh task that calls the stored procedure
+-- Create or update the serverless refresh task
+-- Serverless tasks omit the WAREHOUSE clause; Snowflake manages compute
+-- automatically.  The role that owns the task needs EXECUTE MANAGED TASK
+-- ON ACCOUNT (granted below).
+--
+-- Why EXECUTE IMMEDIATE + $$ delimiters?
+-- ───────────────────────────────────────
+-- CREATE TASK ... AS expects a single SQL statement.  We need two
+-- statements (CALL the procedure, then SET_RETURN_VALUE), so we wrap
+-- them in an anonymous Snowscript block.  The $$ dollar-quoting prevents
+-- the inner semicolons from being parsed as statement terminators by
+-- the outer CREATE TASK.
+--
+-- Why not call SYSTEM$SET_RETURN_VALUE inside the stored procedure?
+-- ─────────────────────────────────────────────────────────────────
+-- SYSTEM$SET_RETURN_VALUE is a side-effect function that can ONLY run
+-- in the task execution context.  Calling it from inside a stored
+-- procedure (even with CALL syntax) fails with:
+--   "Query called from a stored procedure contains a function with
+--    side effects [SYSTEM$SET_RETURN_VALUE]."
+-- The workaround is to capture the procedure's RETURN value at the
+-- task level via CALL ... INTO, then pass it to SET_RETURN_VALUE.
+-- This populates the RETURN_VALUE column in TASK_HISTORY() output.
 CREATE OR ALTER TASK DATA_ACCESS_REFRESH_TASK
-  WAREHOUSE = IDENTIFIER($WH_NAME)
   SCHEDULE = 'USING CRON 0 6 * * 0 America/Chicago'
   COMMENT = 'Refreshes data lake access data every Sunday at 6am CST'
 AS
-  CALL REFRESH_DATA_LAKE_ACCESS();
+  EXECUTE IMMEDIATE
+  $$
+  DECLARE
+    result VARCHAR;  -- holds the procedure's return message (e.g. "... Rows: 59")
+  BEGIN
+    -- Run the refresh; captures the RETURN string into :result
+    CALL REFRESH_DATA_LAKE_ACCESS() INTO :result;
+    -- Surface the result in TASK_HISTORY().RETURN_VALUE
+    CALL SYSTEM$SET_RETURN_VALUE(:result);
+  END;
+  $$;
 
 -- Resume the task so it runs on schedule
 ALTER TASK DATA_ACCESS_REFRESH_TASK RESUME;
@@ -292,5 +322,8 @@ GRANT UPDATE ON ALL TABLES IN SCHEMA APP TO ROLE IDENTIFIER($APP_OWNER_ROLE);
 GRANT USAGE ON WAREHOUSE IDENTIFIER($WH_NAME) TO ROLE IDENTIFIER($APP_OWNER_ROLE);
 GRANT USAGE ON COMPUTE POOL IDENTIFIER($COMPUTE_POOL_NAME) TO ROLE IDENTIFIER($APP_OWNER_ROLE);
 GRANT USAGE ON INTEGRATION PYPI_ACCESS_INTEGRATION TO ROLE IDENTIFIER($APP_OWNER_ROLE);
+GRANT USAGE ON PROCEDURE REFRESH_DATA_LAKE_ACCESS() TO ROLE IDENTIFIER($APP_OWNER_ROLE);
+GRANT OPERATE ON TASK DATA_ACCESS_REFRESH_TASK TO ROLE IDENTIFIER($APP_OWNER_ROLE);
+GRANT EXECUTE MANAGED TASK ON ACCOUNT TO ROLE IDENTIFIER($APP_OWNER_ROLE);
 -- NOTE: The GRANT USAGE ON STREAMLIT is handled by the deploy script
 -- after `snow streamlit deploy` creates the app.
