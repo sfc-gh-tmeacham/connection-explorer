@@ -16,6 +16,7 @@
 
 set -e  # Exit on error
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CONNECTION=${1:-"default"}
 
 echo "=============================================="
@@ -30,7 +31,7 @@ echo ""
 echo "[1/3] Setting up database, schema, warehouse, and refresh task..."
 snow sql \
     --connection "$CONNECTION" \
-    --filename snowflake_data_set_up.sql \
+    --filename "$SCRIPT_DIR/snowflake_data_set_up.sql" \
     --warehouse CONNECTION_EXPLORER_WH
 
 echo ""

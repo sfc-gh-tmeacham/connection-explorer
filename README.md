@@ -32,7 +32,7 @@ This repository is published **as-is** for reference and reuse.
 ### Charts Page
 - **Stacked Bar Charts**: Top databases, schemas, warehouses, and clients by access count, split by read/write direction
 - **4-Column Sankey Diagrams**: Flow visualization of Client → Warehouse → Database → Schema access for reads and writes
-- **Heatmaps**: Client × Database, Database × Schema, and Client × Warehouse heat grids
+- **Heatmaps**: Database × Client, Schema × Client, and Warehouse × Client heat grids
 - **Treemap**: Hierarchical view of access volume by database, schema, warehouse, and client
 
 ### Data Page
@@ -40,8 +40,12 @@ This repository is published **as-is** for reference and reuse.
 - **Group By**: Aggregate data by any combination of Client, Warehouse, Database, Schema, or Direction
 - **Access Totals**: Row counts and total access count summaries
 
+### Classifications Page
+- **Client Application Editor**: View and edit the `client_app_classification` table that maps raw client strings to friendly display names
+- **Inline Editing**: Update classification entries directly in the app with changes written back to Snowflake
+
 ### General
-- **Multi-Page Navigation**: Separate pages for Network Graph, Charts, and Data with top-of-page navigation
+- **Multi-Page Navigation**: Separate pages for Network Graph, Charts, Data, and Classifications with top-of-page navigation
 - **Real-time Data**: Pulls from Snowflake's `account_usage` views via Horizon Catalog
 - **Smart Client Detection**: Automatically identifies 60+ application types
 - **Flexible Filtering**: Filter by database, schema, warehouse, client, organization, direction, and access count
@@ -141,10 +145,10 @@ The easiest way to deploy is using the automated deployment scripts:
 snow connection add
 
 # Deploy everything
-./deploy.sh <connection_name> [warehouse_name]
+./deploy/deploy.sh <connection_name> [warehouse_name]
 
 # Example:
-./deploy.sh my_snowflake_connection COMPUTE_WH
+./deploy/deploy.sh my_snowflake_connection COMPUTE_WH
 ```
 
 **Windows:**
@@ -153,10 +157,10 @@ REM Configure your Snowflake connection (one-time setup)
 snow connection add
 
 REM Deploy everything
-deploy.bat <connection_name> [warehouse_name]
+deploy\deploy.bat <connection_name> [warehouse_name]
 
 REM Example:
-deploy.bat my_snowflake_connection COMPUTE_WH
+deploy\deploy.bat my_snowflake_connection COMPUTE_WH
 ```
 
 The deployment script will:
@@ -175,13 +179,13 @@ Run the setup script to create the database, schema, table, and scheduled refres
 
 ```bash
 snow sql --connection <connection_name> \
-    --filename snowflake_data_set_up.sql \
+    --filename deploy/snowflake_data_set_up.sql \
     --warehouse <warehouse_name>
 ```
 
 Or run directly in Snowflake:
 ```sql
--- Open snowflake_data_set_up.sql in Snowsight and execute
+-- Open deploy/snowflake_data_set_up.sql in Snowsight and execute
 ```
 
 **What `snowflake_data_set_up.sql` creates:**
@@ -219,7 +223,7 @@ snow streamlit deploy \
 
 ### Customizing the Warehouse
 
-By default, the refresh task uses `CONNECTION_EXPLORER_WH`. To change this, edit `snowflake_data_set_up.sql` before deployment:
+By default, the refresh task uses `CONNECTION_EXPLORER_WH`. To change this, edit `deploy/snowflake_data_set_up.sql` before deployment:
 
 ```sql
 SET WH_NAME = 'YOUR_WAREHOUSE_NAME';  -- Change this
@@ -231,18 +235,18 @@ To remove all Connection Explorer objects from your account:
 
 **Mac/Linux:**
 ```bash
-./uninstall.sh <connection_name>
+./deploy/uninstall.sh <connection_name>
 
 # To keep the database but remove everything else:
-./uninstall.sh <connection_name> --keep-database
+./deploy/uninstall.sh <connection_name> --keep-database
 ```
 
 **Windows:**
 ```cmd
-uninstall.bat <connection_name>
+deploy\uninstall.bat <connection_name>
 
 REM To keep the database but remove everything else:
-uninstall.bat <connection_name> --keep-database
+deploy\uninstall.bat <connection_name> --keep-database
 ```
 
 This will remove:
@@ -261,7 +265,8 @@ data-lake-explorer/
 ├── views/                        # Streamlit view modules (not in pages/ to avoid auto-discovery)
 │   ├── network.py                # Network graph page
 │   ├── charts.py                 # Charts page (bars, Sankey, heatmaps, treemap)
-│   └── data.py                   # Data table page with group-by
+│   ├── data.py                   # Data table page with group-by
+│   └── classifications.py        # Client classification editor page
 ├── components/                   # Shared components and logic
 │   ├── network.py                # vis.js network rendering (inline HTML/JS)
 │   ├── charts.py                 # Plotly chart builders
@@ -276,40 +281,109 @@ data-lake-explorer/
 │   ├── snowflake-warehouse.svg   # Warehouse node icon (diamond)
 │   ├── snowflake-schema.svg      # Schema node icon (hexagon)
 │   └── snowflake-bug-logo.*      # Snowflake logo
-├── snowflake_data_set_up.sql     # Database/schema/task setup script
+├── deploy/                       # Deployment and infrastructure scripts
+│   ├── snowflake_data_set_up.sql # Database/schema/task setup script
+│   ├── deploy.sh / deploy.bat   # Deployment scripts
+│   └── uninstall.sh / uninstall.bat  # Uninstall scripts
 ├── snowflake.yml                 # Snowflake CLI deployment config
 ├── pyproject.toml                # Python project config and dependencies
-├── deploy.sh / deploy.bat        # Deployment scripts
-├── uninstall.sh / uninstall.bat  # Uninstall scripts
 ├── docs/                         # Developer documentation and lessons learned
 └── README.md
 ```
 
 ## Configuration
 
-### Snowflake Permissions
+### Snowflake Infrastructure
 
-The deploying role requires the following privileges:
+The deployment script (`deploy/snowflake_data_set_up.sql`) creates the following resources. All names are configurable via variables at the top of the script.
+
+#### Resources Created by Deployment
+
+| Resource | Name | Type | Purpose |
+|----------|------|------|---------|
+| **Database** | `CONNECTION_EXPLORER_APP_DB` | Standard | Houses all app objects |
+| **Schema** | `APP` | Standard | Contains tables, procedures, tasks, and stage |
+| **Warehouse** | `CONNECTION_EXPLORER_WH` | Medium, Gen 2 | Runs queries for the Streamlit app and refresh procedure. Auto-suspends after 60s. Query acceleration enabled. |
+| **Compute Pool** | `STREAMLIT_COMPUTE_POOL` | CPU_X64_XS (1 node) | Runs the Streamlit app container when deployed to Snowflake. Auto-suspends after 300s. |
+| **Stage** | `STREAMLIT_STAGE` | Internal, directory-enabled | Stores the deployed Streamlit app files |
+| **Table** | `connection_access_30d` | Transient | 30-day access snapshot (no time travel/fail-safe overhead) |
+| **Table** | `client_app_classification` | Standard | Client application pattern-matching rules (304 rows, seeded by the app) |
+| **Procedure** | `REFRESH_CONNECTION_ACCESS()` | SQL | Aggregates data from `account_usage` views into the access table |
+| **Task** | `DATA_ACCESS_REFRESH_TASK` | Serverless | Runs `REFRESH_CONNECTION_ACCESS()` weekly (Sundays 6am CST) |
+| **Streamlit App** | `SNOWFLAKE_CONNECTION_EXPLORER` | Streamlit | The deployed application (created by `snow streamlit deploy`) |
+
+#### External Dependencies
+
+These resources must exist **before** deployment:
+
+| Resource | Purpose | Notes |
+|----------|---------|-------|
+| `SNOWFLAKE` database | Source data (`account_usage` views) | Shared database present in every Snowflake account. Requires `IMPORTED PRIVILEGES` grant. |
+| `PYPI_ACCESS_INTEGRATION` | External access integration | Required for Streamlit in Snowflake to install Python packages from PyPI. Must be created by an account admin if it doesn't already exist. |
+
+#### Customizing Resource Names
+
+Edit the variables at the top of `deploy/snowflake_data_set_up.sql`:
+
+```sql
+SET DB_NAME = 'CONNECTION_EXPLORER_APP_DB';    -- Database name
+SET WH_NAME = 'CONNECTION_EXPLORER_WH';        -- Warehouse name
+SET COMPUTE_POOL_NAME = 'STREAMLIT_COMPUTE_POOL'; -- Compute pool name
+SET DEPLOY_ROLE = 'ACCOUNTADMIN';              -- Role that runs the setup
+SET APP_OWNER_ROLE = 'SYSADMIN';               -- Role that owns the app at runtime
+```
+
+### Roles and Privileges
+
+The deployment uses a two-role model:
+
+| Role | Default | Purpose |
+|------|---------|---------|
+| **Deploy Role** | `ACCOUNTADMIN` | Runs the setup script — creates all resources, grants privileges, and configures the task. Only needed during deployment. |
+| **App Owner Role** | `SYSADMIN` | Owns and runs the Streamlit app day-to-day. Receives scoped grants from the deploy role. |
+
+#### Deploy Role Privileges
+
+The deploy role needs:
 
 | Privilege | Purpose |
 |-----------|---------|
-| `CREATE DATABASE ON ACCOUNT` | Create the `CONNECTION_EXPLORER_APP_DB` database |
-| `CREATE SCHEMA` | Create the `APP` schema |
-| `CREATE TABLE`, `CREATE STAGE`, `CREATE PROCEDURE` | Create objects in the schema |
-| `CREATE TASK`, `EXECUTE TASK` | Create and run the scheduled refresh task |
-| `IMPORTED PRIVILEGES ON DATABASE SNOWFLAKE` | Access to `account_usage` views |
+| `CREATE DATABASE ON ACCOUNT` | Create `CONNECTION_EXPLORER_APP_DB` |
+| `CREATE WAREHOUSE ON ACCOUNT` | Create `CONNECTION_EXPLORER_WH` |
+| `CREATE COMPUTE POOL ON ACCOUNT` | Create `STREAMLIT_COMPUTE_POOL` |
+| `CREATE SCHEMA` on the database | Create the `APP` schema |
+| `CREATE TABLE`, `CREATE STAGE`, `CREATE PROCEDURE` on the schema | Create app objects |
+| `CREATE TASK`, `EXECUTE TASK` on account or schema | Create and run the refresh task |
+| `IMPORTED PRIVILEGES ON DATABASE SNOWFLAKE` | Access `account_usage` views |
 
-The app queries data from `snowflake.account_usage` views:
-- `snowflake.account_usage.sessions`
-- `snowflake.account_usage.query_history`
-- `snowflake.account_usage.access_history`
+#### App Owner Role Grants
+
+The setup script grants the app owner role exactly what it needs to operate:
+
+| Grant | Scope |
+|-------|-------|
+| `USAGE` | Database, schema, warehouse, compute pool |
+| `SELECT`, `INSERT`, `UPDATE` | All tables in `APP` schema |
+| `CREATE TABLE`, `CREATE STAGE` | `APP` schema |
+| `USAGE` | `PYPI_ACCESS_INTEGRATION` |
+| `USAGE` | `REFRESH_CONNECTION_ACCESS()` procedure |
+| `OPERATE` | `DATA_ACCESS_REFRESH_TASK` |
+| `EXECUTE MANAGED TASK ON ACCOUNT` | Required for serverless tasks |
+| `USAGE` | Streamlit app (granted by deploy script after `snow streamlit deploy`) |
 
 > **Note:** Access to `account_usage` views requires `IMPORTED PRIVILEGES` on the shared `SNOWFLAKE` database. This is typically granted by an account administrator:
 > ```sql
 > GRANT IMPORTED PRIVILEGES ON DATABASE SNOWFLAKE TO ROLE <your_role>;
 > ```
 
-The refresh procedure pre-aggregates this data into `CONNECTION_EXPLORER_APP_DB.APP.connection_access_30d` for fast dashboard performance.
+#### Data Sources
+
+The refresh procedure queries these `snowflake.account_usage` views:
+- `snowflake.account_usage.sessions`
+- `snowflake.account_usage.query_history`
+- `snowflake.account_usage.access_history`
+
+Results are pre-aggregated into `CONNECTION_EXPLORER_APP_DB.APP.connection_access_30d` for fast dashboard performance.
 
 ### Client Application Mappings
 
