@@ -258,7 +258,7 @@ This will remove:
 ```
 data-lake-explorer/
 ├── streamlit_app.py              # Main app entry point and multi-page router
-├── pages/                        # Streamlit pages
+├── views/                        # Streamlit view modules (not in pages/ to avoid auto-discovery)
 │   ├── network.py                # Network graph page
 │   ├── charts.py                 # Charts page (bars, Sankey, heatmaps, treemap)
 │   └── data.py                   # Data table page with group-by

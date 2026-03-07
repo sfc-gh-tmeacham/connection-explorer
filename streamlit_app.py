@@ -278,10 +278,10 @@ def main():
     st.sidebar.markdown("Built with Cortex Code :material/terminal:")
 
     # --- Page navigation ---
-    from pages.network import run as network_page
-    from pages.charts import run as charts_page
-    from pages.data import run as data_page
-    from pages.classifications import run as classifications_page
+    from views.network import run as network_page
+    from views.charts import run as charts_page
+    from views.data import run as data_page
+    from views.classifications import run as classifications_page
 
     pg = st.navigation(
         [
