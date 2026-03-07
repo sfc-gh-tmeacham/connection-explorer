@@ -63,11 +63,11 @@ def sidebar_filters(df):
         return df
 
     filter_configs = [
-        ("database", "DATABASE", "Select Database", "Filter by database name"),
-        ("schema", "SCHEMA_NAME", "Select Schema", "Filter by schema (DB.SCHEMA)"),
-        ("warehouse", "WAREHOUSE", "Select Warehouse", "Filter by warehouse name"),
-        ("client", "CLIENT", "Select Client", "Filter by client application"),
-        ("direction", "DIRECTION", "Statement Type", "Filter by access direction (read, write, DDL, metadata)"),
+        ("database", "DATABASE", ":material/database: Database", "Filter by database name"),
+        ("schema", "SCHEMA_NAME", ":material/schema: Schema", "Filter by schema (DB.SCHEMA)"),
+        ("warehouse", "WAREHOUSE", ":material/warehouse: Warehouse", "Filter by warehouse name"),
+        ("client", "CLIENT", ":material/devices: Client", "Filter by client application"),
+        ("direction", "DIRECTION", ":material/swap_vert: Statement Type", "Filter by access direction (read, write, DDL, metadata)"),
     ]
 
     def _sync_filter(persist_key: str, widget_key: str):
@@ -101,17 +101,17 @@ def sidebar_filters(df):
         st.session_state[persist_key] = values[name]
 
     if "widget_filter_access_count" not in st.session_state:
-        st.session_state["widget_filter_access_count"] = st.session_state.get("persist_filter_access_count", 100)
-    access_count = st.sidebar.number_input("Access Count Limit", min_value=1, max_value=1_000_000,
+        st.session_state["widget_filter_access_count"] = st.session_state.get("persist_filter_access_count", 10)
+    access_count = st.sidebar.number_input(":material/filter_alt: Access Count Limit", min_value=1, max_value=1_000_000,
                                            step=10, key="widget_filter_access_count",
-                                           help="Please enter a number between 1 and 1,000,000")
+                                           help="Exclude rows with fewer accesses than this threshold")
     st.session_state["persist_filter_access_count"] = access_count
 
-    row_limit_options = [100, 250, 500, 1000, 2500]
+    row_limit_options = [100, 250, 500, 1000, 2500, 5000]
     if "widget_filter_row_limit" not in st.session_state:
         persist_row = st.session_state.get("persist_filter_row_limit", 500)
         st.session_state["widget_filter_row_limit"] = persist_row if persist_row in row_limit_options else 500
-    row_limit = st.sidebar.selectbox("Graph Node Limit", row_limit_options, key="widget_filter_row_limit",
+    row_limit = st.sidebar.selectbox(":material/hub: Graph Node Limit", row_limit_options, key="widget_filter_row_limit",
                                      help="Limit nodes shown in the network graph (by top access count)")
     st.session_state["persist_filter_row_limit"] = row_limit
 
@@ -137,7 +137,7 @@ def main():
         "persist_filter_client": [],
         "persist_filter_org": "",
         "persist_filter_direction": [],
-        "persist_filter_access_count": 100,
+        "persist_filter_access_count": 10,
         "persist_filter_row_limit": 500,
     }
     for key, default in filter_defaults.items():
@@ -241,7 +241,7 @@ def main():
             client_names=tuple(st.session_state.get("persist_filter_client", []) or []),
             org_filter=st.session_state.get("persist_filter_org", ""),
             direction_filters=tuple(st.session_state.get("persist_filter_direction", []) or []),
-            access_count=st.session_state.get("persist_filter_access_count", 100),
+            access_count=st.session_state.get("persist_filter_access_count", 10),
         )
         row_limit = st.session_state.get("persist_filter_row_limit", 500)
         if len(filtered_df) > row_limit:
@@ -259,13 +259,7 @@ def main():
     # --- Normal mode ---
     st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
-    col1, col2 = st.columns([6, 1])
-    with col1:
-        render_snowflake_header()
-    with col2:
-        if st.button("", help="Clear cache and reload data", icon=":material/refresh:"):
-            st.cache_data.clear()
-            st.rerun()
+    render_snowflake_header()
 
     # Load and filter data, store in session state for pages
     raw_df = load_data(session)
@@ -274,6 +268,9 @@ def main():
     st.session_state["filtered_df"] = filtered_df
     st.session_state["snowflake_session"] = session
 
+    if st.sidebar.button(":material/refresh: Reload Data", help="Clear cache and reload data from Snowflake", use_container_width=True):
+        st.cache_data.clear()
+        st.rerun()
     st.sidebar.markdown("Powered by Streamlit :streamlit:")
     st.sidebar.markdown("Built with Cortex Code :material/terminal:")
 

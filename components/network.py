@@ -1137,7 +1137,7 @@ def render_network(df: pd.DataFrame, _node_images: Dict[str, str],
             sc_size = _log_scale(s.get("total", 0), global_min, global_max, 60, 160)
             tooltip = _build_tooltip(schema_id, "Schema", s, org_name, current_account)
             nodes.append({
-                "id": schema_id, "label": schema_short, "title": tooltip,
+                "id": schema_id, "label": schema_id if hide_databases else schema_short, "title": tooltip,
                 "size": int(sc_size), "color": transparent, "shape": "image",
                 "shapeProperties": shape_props, "borderWidth": 0,
                 "image": _node_images["schema"],

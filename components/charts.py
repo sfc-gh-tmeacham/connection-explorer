@@ -600,7 +600,7 @@ def render_bar_charts(df: pd.DataFrame) -> None:
 
     Layout order:
     1. Bar charts — Client and Database side-by-side, Schema and Warehouse side-by-side
-    2. Heatmaps — Client × Database, Database × Schema, Client × Warehouse (full-width)
+    2. Heatmaps — Database × Client, Schema × Client, Warehouse × Client (full-width)
     3. Treemap — Hierarchical access distribution (full-width)
     4. Sankey diagrams — Read and Write flows full-width (Client → Warehouse → Database → Schema)
 
@@ -633,13 +633,6 @@ def render_bar_charts(df: pd.DataFrame) -> None:
             st.plotly_chart(fig, width="stretch")
 
     has_schema = "SCHEMA_NAME" in df.columns
-    # For display purposes, extract the short schema name from the qualified
-    # DATABASE.SCHEMA value stored in SCHEMA_NAME.
-    if has_schema:
-        display_df = df.copy()
-        display_df["SCHEMA_DISPLAY"] = display_df["SCHEMA_NAME"].apply(_short_schema)
-    else:
-        display_df = df
     col3, col4 = st.columns(2)
     with col3:
         if has_schema:
@@ -653,16 +646,16 @@ def render_bar_charts(df: pd.DataFrame) -> None:
             st.plotly_chart(fig, width="stretch")
 
     # Heatmaps
-    fig = _build_heatmap(df, grid_color, "CLIENT", "DATABASE")
+    fig = _build_heatmap(df, grid_color, "DATABASE", "CLIENT")
     if fig:
         st.plotly_chart(fig, width="stretch")
 
     if has_schema:
-        fig = _build_heatmap(display_df, grid_color, "DATABASE", "SCHEMA_DISPLAY")
+        fig = _build_heatmap(df, grid_color, "SCHEMA_NAME", "CLIENT")
         if fig:
             st.plotly_chart(fig, width="stretch")
 
-    fig = _build_heatmap(df, grid_color, "CLIENT", "WAREHOUSE")
+    fig = _build_heatmap(df, grid_color, "WAREHOUSE", "CLIENT")
     if fig:
         st.plotly_chart(fig, width="stretch")
 
