@@ -493,7 +493,7 @@ export default function(component) {
                 gravitationalConstant: -120000,
                 springLength: 400,
                 springConstant: 0.001,
-                damping: 0.3,
+                damping: 0.1,
                 avoidOverlap: 0.5,
             },
             stabilization: {

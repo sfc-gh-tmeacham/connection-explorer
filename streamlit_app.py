@@ -270,6 +270,9 @@ def main():
 
     if st.sidebar.button(":material/refresh: Reload Data", help="Clear cache and reload data from Snowflake", use_container_width=True):
         st.cache_data.clear()
+        # Clear only the vis.js component cache (not the Snowflake connection)
+        from components.network import _get_component
+        _get_component.clear()
         st.rerun()
     st.sidebar.markdown("Powered by Streamlit :streamlit:")
     st.sidebar.markdown("Built with Cortex Code :material/terminal:")
