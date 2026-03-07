@@ -128,7 +128,7 @@ def render_snowflake_header() -> None:
     st.markdown(
         '''
         <div style="padding: 0.25rem 0; padding-left: 50px;">
-            <h1 style="font-family: Lato, sans-serif; font-size: 32px; font-weight: 900; 
+            <h1 style="font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-size: 32px; font-weight: 900; 
                        color: inherit; letter-spacing: 0.02em; line-height: 1.2; 
                        margin: 0; padding: 0; text-align: left;">
                 Snowflake Connection Explorer

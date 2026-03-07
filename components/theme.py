@@ -31,7 +31,7 @@ CUSTOM_CSS = """
         }
         
         .stApp {
-            font-family: 'Lato', -apple-system, BlinkMacSystemFont, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
         }
         header[data-testid="stHeader"] {
             margin-bottom: 0;
@@ -42,7 +42,7 @@ CUSTOM_CSS = """
         /* IMPORTANT: Do NOT hardcode text colors. Let Streamlit's theme handle dark/light.
            We only set typography + Snowflake accent styling. */
         h1, h2, h3, h4, h5, h6 {
-            font-family: 'Lato', -apple-system, BlinkMacSystemFont, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
             font-weight: 900;
             padding-top: 0px;
             padding-bottom: 0px;
@@ -57,7 +57,7 @@ CUSTOM_CSS = """
         .stSidebar .stNumberInput label,
         .stSidebar .stRadio label,
         .stSidebar .stCheckbox label {
-            font-family: 'Lato', -apple-system, BlinkMacSystemFont, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
             font-weight: 700;
             color: var(--text-color, inherit) !important;
         }
@@ -114,7 +114,7 @@ CUSTOM_CSS = """
             padding-top: 0rem !important;
         }
         .network-title {
-            font-family: 'Lato', -apple-system, BlinkMacSystemFont, sans-serif !important;
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif !important;
             font-weight: 900 !important;
             font-size: 18px !important;
             letter-spacing: 0.02em !important;
@@ -147,7 +147,7 @@ CUSTOM_CSS = """
         }
         .stButton > button {
             margin-bottom: 0rem !important;
-            font-family: 'Lato', -apple-system, BlinkMacSystemFont, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
             font-weight: 900;
             background-color: var(--snowflake-blue) !important;
             color: white !important;
@@ -170,10 +170,10 @@ CUSTOM_CSS = """
             background-color: var(--hover-bg) !important;
         }
         .stSelectbox label, .stNumberInput label {
-            font-family: 'Lato', -apple-system, BlinkMacSystemFont, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
         }
         .stAlert > div {
-            font-family: 'Lato', -apple-system, BlinkMacSystemFont, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
             border-radius: 8px;
         }
         div[data-testid="stAlert"][data-baseweb="notification"] {
@@ -182,7 +182,7 @@ CUSTOM_CSS = """
         /* Altair / Vega charts: keep Snowflake typography */
         .vega-embed,
         .vega-embed * {
-            font-family: 'Lato', -apple-system, BlinkMacSystemFont, sans-serif !important;
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif !important;
         }
         /*
           IMPORTANT: Streamlit's theme toggle is client-side, so Python can't reliably detect it.

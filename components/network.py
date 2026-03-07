@@ -229,7 +229,7 @@ def _load_vis_js() -> str:
 _COMPONENT_CSS = f"""
 :host, .vis-network-container {{
     width: 100%;
-    font-family: 'Lato', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
 }}
 
 #vis-canvas {{
@@ -259,7 +259,7 @@ _COMPONENT_CSS = f"""
 }}
 
 #loading-text {{
-    font-family: 'Lato', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
     font-size: 14px;
     color: var(--st-text-color, #fafafa);
     opacity: 0.7;
@@ -283,7 +283,7 @@ _COMPONENT_CSS = f"""
 }}
 
 div.vis-tooltip {{
-    font-family: 'Lato', -apple-system, BlinkMacSystemFont, sans-serif !important;
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif !important;
     font-size: 12px !important;
     background-color: var(--st-background-color, #0e1117) !important;
     color: var(--st-text-color, #fafafa) !important;
@@ -305,7 +305,7 @@ div.vis-tooltip {{
     border: 1px solid rgba(128,128,128,0.3);
     border-radius: 6px;
     padding: 10px 14px;
-    font-family: 'Lato', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
     font-size: 12px;
     line-height: 1.6;
     z-index: 100;
@@ -341,7 +341,7 @@ div.vis-tooltip {{
     margin-top: 6px;
     padding: 3px 8px;
     font-size: 10px;
-    font-family: 'Lato', sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.03em;
@@ -363,7 +363,7 @@ div.vis-tooltip {{
     position: absolute;
     z-index: 200;
     pointer-events: none;
-    font-family: 'Lato', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
     font-size: 12px;
     background-color: var(--st-background-color, #0e1117);
     color: var(--st-text-color, #fafafa);
@@ -433,7 +433,7 @@ def _build_js() -> str:
     # We load vis.js by evaluating it in a way that sets window.vis.
     # The UMD wrapper in vis-network.min.js checks for `this` context.
     # We use Function() constructor to execute it with `this` = window.
-    component_js = """
+    component_js = r"""
 // --- Inject vis-network.js as a global (UMD) ---
 if (!window.vis || !window.vis.Network) {
     const VIS_JS_CODE = VIS_JS_PLACEHOLDER;
@@ -476,7 +476,7 @@ export default function(component) {
             font: {
                 size: 100,
                 color: textColor,
-                face: 'Lato, -apple-system, BlinkMacSystemFont, sans-serif',
+                face: '-apple-system, BlinkMacSystemFont, sans-serif',
                 strokeWidth: 4,
                 strokeColor: 'rgba(0,0,0,0.65)',
             },
@@ -838,7 +838,7 @@ export default function(component) {
                         font: {
                             size: 80,
                             color: textColor,
-                            face: 'Lato, sans-serif',
+                            face: '-apple-system, BlinkMacSystemFont, sans-serif',
                             bold: true,
                         },
                         color: {

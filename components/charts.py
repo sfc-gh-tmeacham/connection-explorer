@@ -109,7 +109,7 @@ def _build_bar_chart(
         barmode="stack",
         title=dict(
             text=f"Access Count by {col_title}",
-            font=dict(family="Lato, Arial, sans-serif", size=16),
+            font=dict(family="Arial, -apple-system, BlinkMacSystemFont, sans-serif", size=16),
             x=0.5,
             xanchor="center",
         ),
@@ -120,7 +120,7 @@ def _build_bar_chart(
             xanchor="right",
             x=1,
         ),
-        font=dict(family="Lato, Arial, sans-serif", size=12),
+        font=dict(family="Arial, -apple-system, BlinkMacSystemFont, sans-serif", size=12),
         xaxis=dict(
             title=dict(text="Access Count"),
             gridcolor=grid_color,
@@ -342,11 +342,11 @@ def _build_sankey(df: pd.DataFrame, direction: str) -> go.Figure | None:
     fig.update_layout(
         title=dict(
             text=title,
-            font=dict(family="Lato, Arial, sans-serif", size=16),
+            font=dict(family="Arial, -apple-system, BlinkMacSystemFont, sans-serif", size=16),
             x=0.5,
             xanchor="center",
         ),
-        font=dict(family="Lato, Arial, sans-serif", size=12),
+        font=dict(family="Arial, -apple-system, BlinkMacSystemFont, sans-serif", size=12),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
         margin=dict(l=20, r=20, t=50, b=20),
@@ -456,11 +456,11 @@ def _build_heatmap(
     fig.update_layout(
         title=dict(
             text=f"Access Heatmap — {row_label} × {col_label}",
-            font=dict(family="Lato, Arial, sans-serif", size=16),
+            font=dict(family="Arial, -apple-system, BlinkMacSystemFont, sans-serif", size=16),
             x=0.5,
             xanchor="center",
         ),
-        font=dict(family="Lato, Arial, sans-serif", size=12),
+        font=dict(family="Arial, -apple-system, BlinkMacSystemFont, sans-serif", size=12),
         xaxis=dict(
             title=dict(text=col_label),
             tickangle=-45,
@@ -583,11 +583,11 @@ def _build_treemap(df: pd.DataFrame) -> go.Figure | None:
     fig.update_layout(
         title=dict(
             text=title_text,
-            font=dict(family="Lato, Arial, sans-serif", size=16),
+            font=dict(family="Arial, -apple-system, BlinkMacSystemFont, sans-serif", size=16),
             x=0.5,
             xanchor="center",
         ),
-        font=dict(family="Lato, Arial, sans-serif", size=12),
+        font=dict(family="Arial, -apple-system, BlinkMacSystemFont, sans-serif", size=12),
         paper_bgcolor="rgba(0,0,0,0)",
         margin=dict(l=10, r=10, t=50, b=10),
         height=500,

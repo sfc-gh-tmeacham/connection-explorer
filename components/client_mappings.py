@@ -96,7 +96,7 @@ CLIENT_MAPPINGS = [
     ("%intellij%", "application", "IntelliJ"),
     ("%sigma%", "application", "Sigma"),
     ("%talend%", "application", "Talend"),
-    ("%thoughspot%", "application", "ThoughtSpot"),
+    ("%thoughtspot%", "application", "ThoughtSpot"),
     ("%install4j%", "application", "install4j"),
     ("%cognos%", "application", "Cognos"),
     ("%nimbus%", "application", "Nimbus"),
@@ -841,7 +841,7 @@ def generate_client_icon_uri(name: str) -> str:
             f'<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">'
             f'<circle cx="64" cy="64" r="60" fill="{bg_color}" stroke="white" stroke-width="3"/>'
             f'<text x="64" y="64" text-anchor="middle" dominant-baseline="central" '
-            f'font-family="Lato, Arial, sans-serif" font-weight="700" font-size="48" fill="white">'
+            f'font-family="Arial, -apple-system, BlinkMacSystemFont, sans-serif" font-weight="700" font-size="48" fill="white">'
             f'{abbrev}</text></svg>'
         )
 
