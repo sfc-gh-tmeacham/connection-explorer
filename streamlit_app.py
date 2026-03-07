@@ -63,11 +63,11 @@ def sidebar_filters(df):
         return df
 
     filter_configs = [
-        ("database", "DATABASE", "Select Database"),
-        ("schema", "SCHEMA_NAME", "Select Schema"),
-        ("warehouse", "WAREHOUSE", "Select Warehouse"),
-        ("client", "CLIENT", "Select Client"),
-        ("direction", "DIRECTION", "Statement Type"),
+        ("database", "DATABASE", "Select Database", "Filter by database name"),
+        ("schema", "SCHEMA_NAME", "Select Schema", "Filter by schema (DB.SCHEMA)"),
+        ("warehouse", "WAREHOUSE", "Select Warehouse", "Filter by warehouse name"),
+        ("client", "CLIENT", "Select Client", "Filter by client application"),
+        ("direction", "DIRECTION", "Statement Type", "Filter by access direction (read, write, DDL, metadata)"),
     ]
 
     def _sync_filter(persist_key: str, widget_key: str):
@@ -75,7 +75,7 @@ def sidebar_filters(df):
         st.session_state[persist_key] = st.session_state[widget_key]
 
     values = {}
-    for name, col, label in filter_configs:
+    for name, col, label, help_text in filter_configs:
         options = get_distinct_values(df, col)
         persist_key = f"persist_filter_{name}"
         widget_key = f"widget_filter_{name}"
@@ -92,6 +92,7 @@ def sidebar_filters(df):
             key=widget_key,
             on_change=_sync_filter,
             args=(persist_key, widget_key),
+            help=help_text,
         )
         if widget_key not in st.session_state:
             ms_kwargs["default"] = default_vals

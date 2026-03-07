@@ -67,8 +67,8 @@ def run():
         "Each rule has:\n\n"
         "- **Priority** — Lower numbers are evaluated first. The first matching "
         "rule wins.\n"
-        "- **Pattern** — A SQL `LIKE` pattern (use `%` as wildcard) matched "
-        "against the source field.\n"
+        "- **Pattern** — A SQL `ILIKE` pattern (use `%` as wildcard, matching is "
+        "case-insensitive) matched against the source field.\n"
         "- **Source Field** — Which column to match: `client_app_id` or "
         "`application`.\n"
         "- **Display Name** — The friendly label shown in charts and tables.\n\n"
@@ -92,7 +92,7 @@ def run():
 
     col_config = {
         "PRIORITY": st.column_config.NumberColumn("Priority", help="Lower = higher priority", min_value=0, step=1, width="small"),
-        "PATTERN": st.column_config.TextColumn("Pattern", help="SQL LIKE pattern (use % as wildcard)", width="large"),
+        "PATTERN": st.column_config.TextColumn("Pattern", help="SQL ILIKE pattern (use % as wildcard, case-insensitive)", width="large"),
         "SOURCE_FIELD": st.column_config.SelectboxColumn(
             "Source Field",
             help="Column to match against",
@@ -113,7 +113,7 @@ def run():
 
     col1, col2, col3 = st.columns([1, 1, 4])
     with col1:
-        save_clicked = st.button("Save Changes", type="primary", icon=":material/save:")
+        save_clicked = st.button("Save Changes", type="primary", icon=":material/save:", help="Persist edits to the classification table in Snowflake")
     with col2:
         refresh_clicked = st.button(
             "Refresh Data",

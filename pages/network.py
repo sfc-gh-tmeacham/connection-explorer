@@ -37,24 +37,31 @@ def run():
             hide_wh = st.checkbox(
                 "Hide Warehouses", key="hide_warehouses", value=True,
                 disabled=max_hidden and not cur_hide_wh,
+                help="Remove warehouse nodes from the network graph",
             )
         with tc2:
             hide_cl = st.checkbox(
                 "Hide Clients", key="hide_clients",
                 disabled=max_hidden and not cur_hide_cl,
+                help="Remove client application nodes from the network graph",
             )
         with tc3:
             hide_db = st.checkbox(
                 "Hide Databases", key="hide_databases",
                 disabled=max_hidden and not cur_hide_db,
+                help="Remove database nodes from the network graph",
             )
         with tc4:
             hide_sc = st.checkbox(
                 "Hide Schemas", key="hide_schemas",
                 disabled=max_hidden and not cur_hide_sc,
+                help="Remove schema nodes from the network graph",
             )
         with tc5:
-            cluster_db = st.checkbox("Cluster Databases", key="cluster_databases")
+            cluster_db = st.checkbox(
+                "Cluster Databases", key="cluster_databases",
+                help="Group schema nodes under their parent database",
+            )
     with btn_col:
         st.markdown('<div class="fullscreen-btn-container"></div>', unsafe_allow_html=True)
         if st.button("", help="Full Screen", icon=":material/fullscreen:"):
