@@ -235,17 +235,25 @@ Deploy entirely through the Snowflake web UI. No local tooling needed — just a
    - **Compute pool**: `STREAMLIT_COMPUTE_POOL`
 4. Click **Create** — Snowsight opens the app editor with default starter code
 
-**Step 4:** Upload the app files. In the Snowsight editor, use **+ (Add)** > **Upload file** to upload each file, preserving the directory structure:
+**Step 4:** Add the app files. Choose **one** of the following approaches:
 
-| Files | Path in editor |
-|-------|---------------|
-| `streamlit_app.py` | `streamlit_app.py` (root) |
-| `pyproject.toml` | `pyproject.toml` (root) |
-| `components/__init__.py`, `theme.py`, `assets.py`, `data.py`, `network.py`, `charts.py`, `client_mappings.py`, `setup.py` | `components/` |
-| `views/__init__.py`, `network.py`, `charts.py`, `data.py`, `classifications.py` | `views/` |
-| All `.svg` files in `static/` and `static/client-icons/` | `static/` and `static/client-icons/` |
+**Option A — Git repository (recommended):**
+1. In the Snowsight editor, click **Connect to repository**
+2. Select or create a Git integration pointing to this repository
+3. Choose the branch to deploy from — all files sync automatically
 
-> **Tip:** Upload `streamlit_app.py` last (or click **Run** after all files are uploaded) to avoid partial-load errors.
+**Option B — Manual upload:**
+1. In the Snowsight editor, use **+ (Add)** > **Upload file** to upload each file, preserving the directory structure:
+
+   | Files | Path in editor |
+   |-------|---------------|
+   | `streamlit_app.py` | `streamlit_app.py` (root) |
+   | `pyproject.toml` | `pyproject.toml` (root) |
+   | `components/__init__.py`, `theme.py`, `assets.py`, `data.py`, `network.py`, `charts.py`, `client_mappings.py`, `setup.py` | `components/` |
+   | `views/__init__.py`, `network.py`, `charts.py`, `data.py`, `classifications.py` | `views/` |
+   | All `.svg` files in `static/` and `static/client-icons/` | `static/` and `static/client-icons/` |
+
+2. Upload `streamlit_app.py` last (or click **Run** after all files are uploaded) to avoid partial-load errors.
 
 **Step 5:** Add the external access integration for PyPI packages:
 1. In the app editor, click the **vertical ellipsis menu** (upper-right) > **App settings**
