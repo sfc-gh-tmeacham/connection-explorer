@@ -164,10 +164,12 @@ deploy\deploy.bat my_snowflake_connection COMPUTE_WH
 ```
 
 The deployment script will:
-1. Create the `CONNECTION_EXPLORER_APP_DB.APP` database and schema
+1. Create the database and schema (default: `CONNECTION_EXPLORER_APP_DB.APP`, configurable in the setup SQL)
 2. Create the transient data table and refresh stored procedure
 3. Execute the procedure to load initial 30-day access data
 4. Deploy the Streamlit app
+
+> **Note:** At runtime, the app detects its database and schema from the active session (`CURRENT_DATABASE()` / `CURRENT_SCHEMA()`), so it works regardless of what names you choose during deployment.
 
 ### Manual Deployment
 
@@ -188,9 +190,9 @@ Or run directly in Snowflake:
 -- Open deploy/snowflake_data_set_up.sql in Snowsight and execute
 ```
 
-**What `snowflake_data_set_up.sql` creates:**
-- Database: `CONNECTION_EXPLORER_APP_DB`
-- Schema: `APP`
+**What `snowflake_data_set_up.sql` creates** (names are configurable via variables at the top of the script):
+- Database: `CONNECTION_EXPLORER_APP_DB` (default)
+- Schema: `APP` (default)
 - Table: `connection_access_30d` (transient table with 30-day access snapshot)
 - Stage: `STREAMLIT_STAGE` (for app deployment)
 - Procedure: `REFRESH_CONNECTION_ACCESS()` (uses INSERT OVERWRITE)
@@ -216,8 +218,8 @@ Or run directly in Snowflake:
 ```bash
 snow streamlit deploy \
     --connection <connection_name> \
-    --database CONNECTION_EXPLORER_APP_DB \
-    --schema APP \
+    --database <your_database> \
+    --schema <your_schema> \
     --replace
 ```
 
@@ -274,7 +276,7 @@ data-lake-explorer/
 │   ├── assets.py                 # SVG icon loading and encoding
 │   ├── client_mappings.py        # Client application detection rules
 │   ├── theme.py                  # Snowflake brand colors and theme helpers
-│   └── setup.py                  # Snowflake connection setup
+│   └── setup.py                  # Auto-setup and dynamic table name resolution
 ├── static/                       # Static assets
 │   ├── client-icons/             # 60+ branded SVG client icons
 │   ├── snowflake-database.svg    # Database node icon (rounded square)
@@ -383,7 +385,7 @@ The refresh procedure queries these `snowflake.account_usage` views:
 - `snowflake.account_usage.query_history`
 - `snowflake.account_usage.access_history`
 
-Results are pre-aggregated into `CONNECTION_EXPLORER_APP_DB.APP.connection_access_30d` for fast dashboard performance.
+Results are pre-aggregated into `<your_database>.<your_schema>.connection_access_30d` for fast dashboard performance. The app resolves the actual database and schema at runtime.
 
 ### Client Application Mappings
 
