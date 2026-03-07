@@ -413,8 +413,8 @@ def get_fq_names(_session) -> dict:
     db, schema = row[0], row[1]
     fq_schema = f"{db}.{schema}"
     return {
-        "access_table": f"{fq_schema}.connection_access_30d",
-        "classification_table": f"{fq_schema}.client_app_classification",
+        "access_table": f"{fq_schema}.CONNECTION_ACCESS_30D",
+        "classification_table": f"{fq_schema}.CLIENT_APP_CLASSIFICATION",
     }
 ```
 

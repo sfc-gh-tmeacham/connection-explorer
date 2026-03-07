@@ -2,7 +2,7 @@
 
 Detects the current database and schema from the active Snowpark session
 (works in both Streamlit-in-Snowflake and local dev) and creates the
-``connection_access_30d`` access table and ``client_app_classification``
+``CONNECTION_ACCESS_30D`` access table and ``CLIENT_APP_CLASSIFICATION``
 lookup table if they do not already exist.  The classification table is
 seeded via MERGE from ``CLIENT_MAPPINGS`` so re-runs are idempotent.
 """
@@ -44,8 +44,8 @@ def get_fq_names(_session) -> dict:
         fq_schema = f"{_FALLBACK_DB}.{_FALLBACK_SCHEMA}"
         return {
             "schema": fq_schema,
-            "access_table": f"{fq_schema}.connection_access_30d",
-            "classification_table": f"{fq_schema}.client_app_classification",
+            "access_table": f"{fq_schema}.CONNECTION_ACCESS_30D",
+            "classification_table": f"{fq_schema}.CLIENT_APP_CLASSIFICATION",
         }
 
     row = _session.sql("SELECT CURRENT_DATABASE(), CURRENT_SCHEMA()").collect()[0]
@@ -54,8 +54,8 @@ def get_fq_names(_session) -> dict:
     logger.info("Resolved FQ schema: %s", fq_schema)
     return {
         "schema": fq_schema,
-        "access_table": f"{fq_schema}.connection_access_30d",
-        "classification_table": f"{fq_schema}.client_app_classification",
+        "access_table": f"{fq_schema}.CONNECTION_ACCESS_30D",
+        "classification_table": f"{fq_schema}.CLIENT_APP_CLASSIFICATION",
     }
 
 
@@ -95,6 +95,7 @@ def ensure_tables_exist(_session) -> None:
                 direction         VARCHAR,
                 access_count      NUMBER
             )
+            COMMENT = '30-day access snapshot aggregated by REFRESH_CONNECTION_ACCESS()'
         """).collect()
 
         # --- Classification lookup table ---
@@ -108,6 +109,7 @@ def ensure_tables_exist(_session) -> None:
                 source_field   VARCHAR,
                 display_name   VARCHAR
             )
+            COMMENT = 'Client application pattern-matching rules for display name resolution'
         """).collect()
 
         # --- Seed classification rules ---

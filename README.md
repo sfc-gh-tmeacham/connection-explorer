@@ -9,13 +9,26 @@
 
 ![Snowflake](static/snowflake-bug-logo.png)
 
-## Repository Policy (Public / Read-Only)
+## Table of Contents
 
-This repository is published **as-is** for reference and reuse.
-
-- **Support**: No support is provided.
-- **Issues / Discussions**: Not accepted.
-- **Pull requests**: Not accepted (please fork if you'd like to modify).
+- [Features](#features)
+- [Prerequisites](#prerequisites)
+- [Installation](#installation)
+- [Running Locally](#running-locally)
+- [Deploying to Snowflake](#deploying-to-snowflake-streamlit-in-snowflake)
+  - [Quick Deploy](#quick-deploy-recommended)
+  - [Manual Deployment](#manual-deployment)
+  - [Customizing the Warehouse](#customizing-the-warehouse)
+- [Uninstalling](#uninstalling)
+- [Architecture: Connection Strategy](#architecture-connection-strategy)
+- [Project Structure](#project-structure)
+- [Configuration](#configuration)
+  - [Snowflake Infrastructure](#snowflake-infrastructure)
+  - [Roles and Privileges](#roles-and-privileges)
+  - [Client Application Mappings](#client-application-mappings)
+- [License](#license)
+- [Built With](#built-with)
+- [Repository Policy](#repository-policy)
 
 ## Features
 
@@ -41,7 +54,7 @@ This repository is published **as-is** for reference and reuse.
 - **Access Totals**: Row counts and total access count summaries
 
 ### Classifications Page
-- **Client Application Editor**: View and edit the `client_app_classification` table that maps raw client strings to friendly display names
+- **Client Application Editor**: View and edit the `CLIENT_APP_CLASSIFICATION` table that maps raw client strings to friendly display names
 - **Inline Editing**: Update classification entries directly in the app with changes written back to Snowflake
 
 ### General
@@ -99,40 +112,11 @@ The app will open in your browser at `http://localhost:8501`
 
 **Note**: Without a Snowflake connection, the app will display sample data for demonstration purposes.
 
-## How the App Connects to Snowflake
-
-The app uses a three-tier connection strategy that adapts to wherever it's running:
-
-| Environment | Connection Method | Configuration |
-|---|---|---|
-| **Streamlit in Snowflake** | `get_active_session()` — Snowflake auto-injects a pre-authenticated Snowpark session into the container runtime | None required; inherits role and warehouse from the Streamlit app object |
-| **Local with credentials** | `st.connection("snowflake")` — Streamlit's built-in Snowflake connector reads from `.streamlit/secrets.toml` | Requires `.streamlit/secrets.toml` with account, user, and authentication details |
-| **Local without credentials** | `session = None` — falls back to synthetic sample data | No configuration needed; the app runs in demo mode |
-
-The logic lives in `streamlit_app.py` and executes on startup:
-
-```python
-try:
-    from snowflake.snowpark.context import get_active_session
-    session = get_active_session()
-except Exception:
-    try:
-        conn = st.connection("snowflake")
-        session = conn.session()
-    except Exception:
-        session = None
-```
-
-**Key points:**
-- When deployed to Snowflake, there are **no credentials to manage** — the platform handles authentication transparently via `get_active_session()`
-- The app never uses raw `snowflake.connector` or `Session.builder` — all queries go through the Snowpark session
-- All data access uses `session.sql(...).to_pandas()` to execute SQL and return DataFrames
-
 ## Deploying to Snowflake (Streamlit in Snowflake)
 
 ### Prerequisites
 - [Snowflake CLI](https://docs.snowflake.com/en/developer-guide/snowflake-cli) (`snow`) installed
-- Snowflake account with a role that has the [required privileges](#snowflake-permissions)
+- Snowflake account with a role that has the [required privileges](#roles-and-privileges)
 - A warehouse for running queries
 
 ### Quick Deploy (Recommended)
@@ -193,7 +177,7 @@ Or run directly in Snowflake:
 **What `snowflake_data_set_up.sql` creates** (names are configurable via variables at the top of the script):
 - Database: `CONNECTION_EXPLORER_APP_DB` (default)
 - Schema: `APP` (default)
-- Table: `connection_access_30d` (transient table with 30-day access snapshot)
+- Table: `CONNECTION_ACCESS_30D` (transient table with 30-day access snapshot)
 - Stage: `STREAMLIT_STAGE` (for app deployment)
 - Procedure: `REFRESH_CONNECTION_ACCESS()` (uses INSERT OVERWRITE)
 - Task: `DATA_ACCESS_REFRESH_TASK` (runs weekly on Sundays at 6am CST)
@@ -259,6 +243,35 @@ This will remove:
 - Stage
 - Schema (and optionally the database)
 
+## Architecture: Connection Strategy
+
+The app uses a three-tier connection strategy that adapts to wherever it's running:
+
+| Environment | Connection Method | Configuration |
+|---|---|---|
+| **Streamlit in Snowflake** | `get_active_session()` — Snowflake auto-injects a pre-authenticated Snowpark session into the container runtime | None required; inherits role and warehouse from the Streamlit app object |
+| **Local with credentials** | `st.connection("snowflake")` — Streamlit's built-in Snowflake connector reads from `.streamlit/secrets.toml` | Requires `.streamlit/secrets.toml` with account, user, and authentication details |
+| **Local without credentials** | `session = None` — falls back to synthetic sample data | No configuration needed; the app runs in demo mode |
+
+The logic lives in `streamlit_app.py` and executes on startup:
+
+```python
+try:
+    from snowflake.snowpark.context import get_active_session
+    session = get_active_session()
+except Exception:
+    try:
+        conn = st.connection("snowflake")
+        session = conn.session()
+    except Exception:
+        session = None
+```
+
+**Key points:**
+- When deployed to Snowflake, there are **no credentials to manage** — the platform handles authentication transparently via `get_active_session()`
+- The app never uses raw `snowflake.connector` or `Session.builder` — all queries go through the Snowpark session
+- All data access uses `session.sql(...).to_pandas()` to execute SQL and return DataFrames
+
 ## Project Structure
 
 ```
@@ -308,8 +321,8 @@ The deployment script (`deploy/snowflake_data_set_up.sql`) creates the following
 | **Warehouse** | `CONNECTION_EXPLORER_WH` | Medium, Gen 2 | Runs queries for the Streamlit app and refresh procedure. Auto-suspends after 60s. Query acceleration enabled. |
 | **Compute Pool** | `STREAMLIT_COMPUTE_POOL` | CPU_X64_XS (1 node) | Runs the Streamlit app container when deployed to Snowflake. Auto-suspends after 300s. |
 | **Stage** | `STREAMLIT_STAGE` | Internal, directory-enabled | Stores the deployed Streamlit app files |
-| **Table** | `connection_access_30d` | Transient | 30-day access snapshot (no time travel/fail-safe overhead) |
-| **Table** | `client_app_classification` | Standard | Client application pattern-matching rules (304 rows, seeded by the app) |
+| **Table** | `CONNECTION_ACCESS_30D` | Transient | 30-day access snapshot (no time travel/fail-safe overhead) |
+| **Table** | `CLIENT_APP_CLASSIFICATION` | Standard | Client application pattern-matching rules (304 rows, seeded by the app) |
 | **Procedure** | `REFRESH_CONNECTION_ACCESS()` | SQL | Aggregates data from `account_usage` views into the access table |
 | **Task** | `DATA_ACCESS_REFRESH_TASK` | Serverless | Runs `REFRESH_CONNECTION_ACCESS()` weekly (Sundays 6am CST) |
 | **Streamlit App** | `SNOWFLAKE_CONNECTION_EXPLORER` | Streamlit | The deployed application (created by `snow streamlit deploy`) |
@@ -385,7 +398,7 @@ The refresh procedure queries these `snowflake.account_usage` views:
 - `snowflake.account_usage.query_history`
 - `snowflake.account_usage.access_history`
 
-Results are pre-aggregated into `<your_database>.<your_schema>.connection_access_30d` for fast dashboard performance. The app resolves the actual database and schema at runtime.
+Results are pre-aggregated into `<your_database>.<your_schema>.CONNECTION_ACCESS_30D` for fast dashboard performance. The app resolves the actual database and schema at runtime.
 
 ### Client Application Mappings
 
@@ -406,3 +419,11 @@ See [LICENSE](LICENSE) file.
 - [Plotly](https://plotly.com/python/) - Charts (bar, Sankey, heatmap, treemap)
 - [Snowpark for Python](https://docs.snowflake.com/en/developer-guide/snowpark/python/index) - Snowflake connectivity
 - [Cortex Code CLI](https://docs.snowflake.com/en/user-guide/cortex-code/cortex-code) - AI-powered development assistant
+
+## Repository Policy
+
+This repository is published **as-is** for reference and reuse.
+
+- **Support**: No support is provided.
+- **Issues / Discussions**: Not accepted.
+- **Pull requests**: Not accepted (please fork if you'd like to modify).

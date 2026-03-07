@@ -17,6 +17,7 @@
 SET DB_NAME = 'CONNECTION_EXPLORER_APP_DB';
 SET WH_NAME = 'CONNECTION_EXPLORER_WH';
 SET COMPUTE_POOL_NAME = 'STREAMLIT_COMPUTE_POOL';  -- Compute pool for Streamlit on Container
+SET EAI_NAME = 'PYPI_ACCESS_INTEGRATION';           -- External access integration for PyPI packages
 SET DEPLOY_ROLE = 'ACCOUNTADMIN';
 SET APP_OWNER_ROLE = 'SYSADMIN';  -- Role that owns the Streamlit app
 
@@ -40,6 +41,13 @@ CREATE COMPUTE POOL IF NOT EXISTS IDENTIFIER($COMPUTE_POOL_NAME)
   AUTO_RESUME = TRUE
   COMMENT = 'Compute pool for Snowflake Connection Explorer Streamlit app';
 
+-- Create external access integration for PyPI package installation (container runtime)
+-- Uses the Snowflake-managed network rule — no custom network rule required.
+CREATE EXTERNAL ACCESS INTEGRATION IF NOT EXISTS IDENTIFIER($EAI_NAME)
+  ALLOWED_NETWORK_RULES = (snowflake.external_access.pypi_rule)
+  ENABLED = TRUE
+  COMMENT = 'Allows Streamlit container runtime to install packages from PyPI';
+
 -- Create database and schema
 CREATE DATABASE IF NOT EXISTS IDENTIFIER($DB_NAME);
 USE DATABASE IDENTIFIER($DB_NAME);
@@ -51,7 +59,7 @@ CREATE STAGE IF NOT EXISTS STREAMLIT_STAGE
     DIRECTORY = (ENABLE = TRUE);
 
 -- Create the table to store 30-day access snapshot (transient - no time travel/fail-safe needed)
-CREATE TRANSIENT TABLE IF NOT EXISTS connection_access_30d (
+CREATE TRANSIENT TABLE IF NOT EXISTS CONNECTION_ACCESS_30D (
     organization_name VARCHAR,
     account_id VARCHAR,
     client VARCHAR,
@@ -60,23 +68,25 @@ CREATE TRANSIENT TABLE IF NOT EXISTS connection_access_30d (
     schema_name VARCHAR,
     direction VARCHAR,
     access_count NUMBER
-);
+)
+COMMENT = '30-day access snapshot aggregated by REFRESH_CONNECTION_ACCESS()';
 
 -- Add schema_name column if upgrading from an older version of the table
-ALTER TABLE IF EXISTS connection_access_30d ADD COLUMN IF NOT EXISTS schema_name VARCHAR;
+ALTER TABLE IF EXISTS CONNECTION_ACCESS_30D ADD COLUMN IF NOT EXISTS schema_name VARCHAR;
 
 -- Create the client application classification lookup table
 -- Seeded automatically by the Streamlit app from components/client_mappings.py.
 -- The stored procedure joins against this table during refresh.
-CREATE TABLE IF NOT EXISTS client_app_classification (
+CREATE TABLE IF NOT EXISTS CLIENT_APP_CLASSIFICATION (
     priority       NUMBER,
     pattern        VARCHAR,
     source_field   VARCHAR,
     display_name   VARCHAR
-);
+)
+COMMENT = 'Client application pattern-matching rules for display name resolution';
 
 -- Create the refresh stored procedure
--- Now uses the client_app_classification lookup table instead of a CASE/WHEN block.
+-- Now uses the CLIENT_APP_CLASSIFICATION lookup table instead of a CASE/WHEN block.
 -- Logging requires an event table configured at the account level:
 --   CREATE EVENT TABLE IF NOT EXISTS <db>.<schema>.<table>;
 --   ALTER ACCOUNT SET EVENT_TABLE = '<db>.<schema>.<table>';
@@ -113,7 +123,7 @@ BEGIN
      *                       (bare database-level access like SHOW/DESCRIBE).
      *
      *   matched_by_*     – Two-pass classification against the
-     *                       client_app_classification lookup table.  First
+     *                       CLIENT_APP_CLASSIFICATION lookup table.  First
      *                       matches on client_app_id patterns, then on
      *                       application (from CLIENT_ENVIRONMENT JSON).
      *                       Split into two LEFT JOINs to avoid an OR-join
@@ -133,7 +143,7 @@ BEGIN
      *                       distinct query counts per route.
      */
 
-    INSERT OVERWRITE INTO connection_access_30d (
+    INSERT OVERWRITE INTO CONNECTION_ACCESS_30D (
         organization_name, account_id, client, warehouse, 
         database, schema_name, direction, access_count
     )
@@ -172,7 +182,7 @@ BEGIN
             c.display_name AS dn_app_id,
             c.priority AS p_app_id
         FROM raw_sessions rs
-        LEFT JOIN client_app_classification c
+        LEFT JOIN CLIENT_APP_CLASSIFICATION c
             ON c.source_field = 'client_app_id' 
             AND rs.client_app_id ILIKE c.pattern
     ),
@@ -183,7 +193,7 @@ BEGIN
             c.display_name AS dn_app,
             c.priority AS p_app
         FROM matched_by_app_id m
-        LEFT JOIN client_app_classification c
+        LEFT JOIN CLIENT_APP_CLASSIFICATION c
             ON c.source_field = 'application' 
             AND m.application ILIKE c.pattern
     ),
@@ -248,7 +258,7 @@ BEGIN
     GROUP BY ALL;
 
     -- Log the row count after the refresh
-    SELECT COUNT(*) INTO :row_count FROM connection_access_30d;
+    SELECT COUNT(*) INTO :row_count FROM CONNECTION_ACCESS_30D;
     result_msg := 'Connection access data refreshed successfully. Rows: ' || :row_count;
     SYSTEM$LOG_INFO('REFRESH_CONNECTION_ACCESS: ' || :result_msg);
     RETURN result_msg;
@@ -321,7 +331,7 @@ GRANT INSERT ON ALL TABLES IN SCHEMA APP TO ROLE IDENTIFIER($APP_OWNER_ROLE);
 GRANT UPDATE ON ALL TABLES IN SCHEMA APP TO ROLE IDENTIFIER($APP_OWNER_ROLE);
 GRANT USAGE ON WAREHOUSE IDENTIFIER($WH_NAME) TO ROLE IDENTIFIER($APP_OWNER_ROLE);
 GRANT USAGE ON COMPUTE POOL IDENTIFIER($COMPUTE_POOL_NAME) TO ROLE IDENTIFIER($APP_OWNER_ROLE);
-GRANT USAGE ON INTEGRATION PYPI_ACCESS_INTEGRATION TO ROLE IDENTIFIER($APP_OWNER_ROLE);
+GRANT USAGE ON INTEGRATION IDENTIFIER($EAI_NAME) TO ROLE IDENTIFIER($APP_OWNER_ROLE);
 GRANT USAGE ON PROCEDURE REFRESH_CONNECTION_ACCESS() TO ROLE IDENTIFIER($APP_OWNER_ROLE);
 GRANT OPERATE ON TASK DATA_ACCESS_REFRESH_TASK TO ROLE IDENTIFIER($APP_OWNER_ROLE);
 GRANT EXECUTE MANAGED TASK ON ACCOUNT TO ROLE IDENTIFIER($APP_OWNER_ROLE);

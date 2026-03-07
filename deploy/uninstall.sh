@@ -64,7 +64,7 @@ echo "This will remove:"
 echo "  - Streamlit app: SNOWFLAKE_CONNECTION_EXPLORER"
 echo "  - Task: DATA_ACCESS_REFRESH_TASK"
 echo "  - Procedure: REFRESH_CONNECTION_ACCESS"
-echo "  - Table: connection_access_30d"
+echo "  - Table: CONNECTION_ACCESS_30D"
 echo "  - Stage: STREAMLIT_STAGE"
 echo "  - Schema: APP"
 if [ "$KEEP_DATABASE" = false ]; then
@@ -96,7 +96,7 @@ echo "[3/4] Dropping procedure, table, and stage..."
 snow sql --connection "$CONNECTION" -q \
     "DROP PROCEDURE IF EXISTS CONNECTION_EXPLORER_APP_DB.APP.REFRESH_CONNECTION_ACCESS();"
 snow sql --connection "$CONNECTION" -q \
-    "DROP TABLE IF EXISTS CONNECTION_EXPLORER_APP_DB.APP.connection_access_30d;"
+    "DROP TABLE IF EXISTS CONNECTION_EXPLORER_APP_DB.APP.CONNECTION_ACCESS_30D;"
 snow sql --connection "$CONNECTION" -q \
     "DROP STAGE IF EXISTS CONNECTION_EXPLORER_APP_DB.APP.STREAMLIT_STAGE;"
 
