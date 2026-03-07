@@ -7,6 +7,14 @@ from components.network import render_network
 
 
 def run():
+    """Render the Network Graph page with vis.js visualization.
+
+    Reads the filtered DataFrame from ``st.session_state["filtered_df"]``
+    and renders an interactive force-directed graph.  Provides toggle
+    checkboxes to hide/show node types (warehouses, clients, databases,
+    schemas) with an "at least 2 visible" constraint, a database
+    clustering toggle, and a fullscreen button.
+    """
     df = st.session_state.get("filtered_df")
     if df is None or df.empty:
         st.info("No data to display. Adjust filters in the sidebar.")

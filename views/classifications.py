@@ -17,7 +17,15 @@ SAMPLE_DATA = pd.DataFrame(
 
 
 def _load_classifications(session) -> pd.DataFrame:
-    """Fetch all classification rows ordered by priority."""
+    """Fetch all classification rows ordered by priority.
+
+    Args:
+        session: Active Snowpark ``Session`` used to query Snowflake.
+
+    Returns:
+        A DataFrame containing all rows from the classification table,
+        sorted by the PRIORITY column ascending.
+    """
     return session.sql(f"SELECT * FROM {FQ_TABLE} ORDER BY PRIORITY").to_pandas()
 
 
@@ -26,6 +34,17 @@ def _save_classifications(session, df: pd.DataFrame) -> int:
 
     Uses a transactional DELETE + INSERT approach so the table is never in a
     partially-updated state visible to other sessions.
+
+    Args:
+        session: Active Snowpark ``Session`` used to execute SQL.
+        df: DataFrame with columns PRIORITY, PATTERN, SOURCE_FIELD, and
+            DISPLAY_NAME representing the new classification ruleset.
+
+    Returns:
+        The number of rows written.
+
+    Raises:
+        Exception: Re-raised after ROLLBACK if the INSERT fails.
     """
     session.sql("BEGIN").collect()
     try:
@@ -56,6 +75,14 @@ def _save_classifications(session, df: pd.DataFrame) -> int:
 
 
 def run():
+    """Render the Classifications page for viewing and editing client rules.
+
+    Displays an editable data table of classification rules that map raw
+    Snowflake ``CLIENT_APPLICATION_ID`` and ``APPLICATION`` values to
+    friendly display names.  Provides Save, Refresh (re-run stored
+    procedure), and Reload (discard edits) actions.  Falls back to
+    read-only sample data when no Snowflake session is available.
+    """
     st.markdown("### Client App Classifications")
 
     st.info(

@@ -18,6 +18,14 @@ COLUMN_ORDER = ["ICON", "CLIENT", "WAREHOUSE", "DATABASE", "SCHEMA_NAME", "DIREC
 
 
 def run():
+    """Render the Data page with an interactive table and optional grouping.
+
+    Reads the filtered DataFrame from ``st.session_state["filtered_df"]``
+    and displays it as a Streamlit dataframe.  A multiselect widget allows
+    grouping by one or more dimensions (Client, Warehouse, Database,
+    Schema, Direction), with access counts summed per group.  Client icons
+    are prepended when the CLIENT column is present.
+    """
     df = st.session_state.get("filtered_df")
     if df is None or df.empty:
         st.info("No data to display. Adjust filters in the sidebar.")

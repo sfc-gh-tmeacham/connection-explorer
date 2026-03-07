@@ -71,7 +71,17 @@ def sidebar_filters(df):
     ]
 
     def _sync_filter(persist_key: str, widget_key: str):
-        """on_change callback: copy the widget value to the persist key."""
+        """Copy a widget's current value to its corresponding persist key.
+
+        Used as an ``on_change`` callback for multiselect filter widgets so
+        that user selections survive Streamlit reruns.
+
+        Args:
+            persist_key: The ``st.session_state`` key where the value is
+                persisted across reruns.
+            widget_key: The ``st.session_state`` key bound to the widget
+                via its ``key`` parameter.
+        """
         st.session_state[persist_key] = st.session_state[widget_key]
 
     values = {}

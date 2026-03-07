@@ -1091,6 +1091,17 @@ def render_network(df: pd.DataFrame, _node_images: Dict[str, str],
     shape_props = {"useBorderWithImage": True, "borderType": "circle"}
 
     def _add_edge(src, dst, ac, edge_color, title, path_idx):
+        """Append a directed edge dict to the ``edges`` list.
+
+        Args:
+            src: Source node ID.
+            dst: Target node ID.
+            ac: Access count (used as edge weight/value).
+            edge_color: CSS color string for the edge.
+            title: Tooltip text shown on hover.
+            path_idx: Index into the ``paths`` list linking this edge
+                back to its full client-warehouse-database-schema path.
+        """
         edges.append({
             "id": f"e{len(edges)}", "from": src, "to": dst,
             "value": ac, "color": edge_color, "arrows": "to",
@@ -1265,6 +1276,14 @@ def render_network(df: pd.DataFrame, _node_images: Dict[str, str],
     }
 
     def _on_node_click():
+        """Handle click-to-filter events from the vis.js component.
+
+        Called as an ``on_change`` callback when the JS front-end sends a
+        ``selected_node`` trigger value.  Adds the clicked node's name to
+        the appropriate sidebar filter, or clears all filters when the
+        user clicks empty canvas.  Uses a ``_ts`` timestamp to
+        deduplicate repeated events.
+        """
         state = st.session_state.get("network_graph")
         if not state:
             return
