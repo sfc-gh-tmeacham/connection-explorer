@@ -272,7 +272,8 @@ def main():
     st.session_state["filtered_df"] = filtered_df
     st.session_state["snowflake_session"] = session
 
-    st.sidebar.markdown("Powered by Streamlit :streamlit:")
+    st.sidebar.caption("Data covers the last 30 days")
+    st.sidebar.markdown("Powered by Streamlit :streamlit:, built with Cortex Code 🐧")
 
     # --- Page navigation ---
     from pages.network import run as network_page

@@ -28,4 +28,3 @@
 
 - [ ] **Caching Could Cause Stale Data** — `load_data()` has a 5-minute TTL, but `process_dataframe()` has no TTL at all (cached forever until manual refresh). If underlying data changes, processed results go stale.
 
-- [ ] **No Pagination or Virtual Scrolling** — With large datasets, the network graph loads all nodes at once, which can be slow. The "Graph Node Limit" dropdown mitigates this but is crude.
