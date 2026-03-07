@@ -4,17 +4,19 @@
 -- Required Privileges:
 --   - CREATE DATABASE ON ACCOUNT (or use existing database)
 --   - CREATE WAREHOUSE ON ACCOUNT (or use existing warehouse)
+--   - CREATE COMPUTE POOL ON ACCOUNT (for Streamlit on Container)
 --   - CREATE SCHEMA (on the target database)
 --   - CREATE TABLE, CREATE STAGE, CREATE PROCEDURE (on the schema)
 --   - CREATE TASK, EXECUTE TASK (on account or schema)
 --   - IMPORTED PRIVILEGES ON DATABASE SNOWFLAKE (for account_usage views)
 --
 -- Configuration:
---   Change the database, warehouse, and role below to customize deployment.
+--   Change the database, warehouse, compute pool, and role below to customize deployment.
 -- =============================================================================
 
 SET DB_NAME = 'CONNECTION_EXPLORER_APP_DB';
 SET WH_NAME = 'CONNECTION_EXPLORER_WH';
+SET COMPUTE_POOL_NAME = 'CONNECTION_EXPLORER_POOL';
 SET DEPLOY_ROLE = 'ACCOUNTADMIN';
 SET APP_ROLE = 'SYSADMIN';
 
@@ -28,6 +30,15 @@ CREATE WAREHOUSE IF NOT EXISTS IDENTIFIER($WH_NAME)
   AUTO_SUSPEND = 60
   AUTO_RESUME = TRUE
   COMMENT = 'Warehouse for Snowflake Connection Explorer';
+
+-- Create compute pool for Streamlit on Container deployment
+CREATE COMPUTE POOL IF NOT EXISTS IDENTIFIER($COMPUTE_POOL_NAME)
+  MIN_NODES = 1
+  MAX_NODES = 1
+  INSTANCE_FAMILY = CPU_X64_XS
+  AUTO_SUSPEND_SECS = 300
+  AUTO_RESUME = TRUE
+  COMMENT = 'Compute pool for Snowflake Connection Explorer Streamlit app';
 
 -- Create database and schema
 CREATE DATABASE IF NOT EXISTS IDENTIFIER($DB_NAME);
