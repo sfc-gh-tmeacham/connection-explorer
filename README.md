@@ -7,8 +7,6 @@
 
 **Full visibility into your Snowflake data access** — A Streamlit application that visualizes database, schema, warehouse, and client application access patterns using interactive network graphs powered by Snowflake Horizon Catalog.
 
-![Snowflake](static/snowflake-bug-logo.png)
-
 ## Table of Contents
 
 - [Features](#features)

@@ -227,8 +227,6 @@ def _load_vis_js() -> str:
 # ---------------------------------------------------------------------------
 
 _COMPONENT_CSS = f"""
-@import url('https://fonts.googleapis.com/css2?family=Lato:wght@300;400;700;900&display=swap');
-
 :host, .vis-network-container {{
     width: 100%;
     font-family: 'Lato', -apple-system, BlinkMacSystemFont, sans-serif;

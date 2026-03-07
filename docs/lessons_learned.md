@@ -421,3 +421,11 @@ def get_fq_names(_session) -> dict:
 In SiS, the session's database/schema is set by the deployment target. Locally, it comes from the connection config in `secrets.toml`. This single function replaces all hardcoded `DB.SCHEMA.TABLE` references and ensures the app works in any installation.
 
 **Corollary**: The auto-setup code should NOT run `CREATE DATABASE` or `CREATE SCHEMA` — the database/schema must already exist (created by the deploy script or the SiS deployment). The app should only ensure its *tables* exist within the current context.
+
+### Streamlit container runtime blocks all external network access except PyPI
+
+Streamlit container runtime (`SYSTEM$ST_CONTAINER_RUNTIME_PY3_11`) runs inside a locked-down network environment. The only allowed outbound traffic is to PyPI (via `PYPI_ACCESS_INTEGRATION` with the `snowflake.external_access.pypi_rule` network rule). All other external URLs — CDNs, Google Fonts, external APIs — are unreachable at runtime.
+
+CSS `@import url('https://fonts.googleapis.com/...')` silently fails, leaving the page with no custom font loaded. The fix is to either remove the `@import` and rely on system font fallbacks already in the `font-family` stack, or bundle font files as static assets. Removing is simpler; the visual difference is negligible since system fonts (`-apple-system`, `BlinkMacSystemFont`, `sans-serif`) render well.
+
+This also means any library that fetches resources from a CDN at runtime (e.g., Plotly loading MathJax, vis.js loaded from unpkg) will break. Always verify that dependencies load from local/bundled files, not remote URLs.

@@ -22,9 +22,6 @@ AMBER = "#F5A623"           # Write/ingest edge color
 
 CUSTOM_CSS = """
     <style>
-        /* Snowflake Brand Typography: Lato for body text (TEXTA for headlines is proprietary) */
-        @import url('https://fonts.googleapis.com/css2?family=Lato:wght@300;400;700;900&display=swap');
-        
         /* CSS Variables for Snowflake Brand Colors */
         :root {
             --snowflake-blue: #29B5E8;
