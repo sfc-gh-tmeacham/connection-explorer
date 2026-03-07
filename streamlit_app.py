@@ -58,6 +58,7 @@ def sidebar_filters(df):
         A filtered (and possibly row-limited) copy of *df*.
     """
     st.sidebar.header("Filters")
+    st.sidebar.caption("Data covers the last 30 days")
     if df.empty:
         return df
 
@@ -225,7 +226,7 @@ def main():
             </style>
         """, unsafe_allow_html=True)
 
-        if st.button("⤢", key="exit_fullscreen", help="Exit Full Screen"):
+        if st.button("", key="exit_fullscreen", help="Exit Full Screen", icon=":material/fullscreen_exit:"):
             st.session_state["full_screen_mode"] = False
             st.rerun()
 
@@ -261,7 +262,7 @@ def main():
     with col1:
         render_snowflake_header()
     with col2:
-        if st.button("↻", help="Clear cache and reload data"):
+        if st.button("", help="Clear cache and reload data", icon=":material/refresh:"):
             st.cache_data.clear()
             st.rerun()
 
@@ -272,8 +273,8 @@ def main():
     st.session_state["filtered_df"] = filtered_df
     st.session_state["snowflake_session"] = session
 
-    st.sidebar.caption("Data covers the last 30 days")
-    st.sidebar.markdown("Powered by Streamlit :streamlit:, built with Cortex Code 🐧")
+    st.sidebar.markdown("Powered by Streamlit :streamlit:")
+    st.sidebar.markdown("Built with Cortex Code :material/terminal:")
 
     # --- Page navigation ---
     from pages.network import run as network_page
@@ -282,9 +283,9 @@ def main():
 
     pg = st.navigation(
         [
-            st.Page(network_page, title="Network Graph", default=True, url_path="network"),
-            st.Page(charts_page, title="Charts", url_path="charts"),
-            st.Page(data_page, title="Data", url_path="data"),
+            st.Page(network_page, title="Network Graph", default=True, url_path="network", icon=":material/hub:"),
+            st.Page(charts_page, title="Charts", url_path="charts", icon=":material/bar_chart:"),
+            st.Page(data_page, title="Data", url_path="data", icon=":material/table_view:"),
         ],
         position="top",
     )

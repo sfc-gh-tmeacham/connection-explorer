@@ -57,7 +57,7 @@ def run():
             cluster_db = st.checkbox("Cluster Databases", key="cluster_databases")
     with btn_col:
         st.markdown('<div class="fullscreen-btn-container"></div>', unsafe_allow_html=True)
-        if st.button("⛶", help="Full Screen"):
+        if st.button("", help="Full Screen", icon=":material/fullscreen:"):
             st.session_state["full_screen_mode"] = True
             st.rerun()
 
@@ -66,3 +66,5 @@ def run():
         fullscreen=False, hide_warehouses=hide_wh, hide_clients=hide_cl,
         hide_databases=hide_db, hide_schemas=hide_sc, cluster_databases=cluster_db,
     )
+
+    st.caption("Excludes CALL statements, session/transaction commands, system processes, and temporary objects.")
