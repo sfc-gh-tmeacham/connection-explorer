@@ -3,9 +3,10 @@
 import pandas as pd
 import streamlit as st
 
-FQ_TABLE = "CONNECTION_EXPLORER_APP_DB.APP.client_app_classification"
+from components.setup import get_fq_names
 
-# Sample data shown when no Snowflake session is available
+# Fallback data shown in demo mode (no Snowflake session).  Mirrors the real
+# table schema so the UI renders identically in both modes.
 SAMPLE_DATA = pd.DataFrame(
     {
         "PRIORITY": [0, 1, 2, 3, 4],
@@ -26,7 +27,8 @@ def _load_classifications(session) -> pd.DataFrame:
         A DataFrame containing all rows from the classification table,
         sorted by the PRIORITY column ascending.
     """
-    return session.sql(f"SELECT * FROM {FQ_TABLE} ORDER BY PRIORITY").to_pandas()
+    fq_table = get_fq_names(session)["classification_table"]
+    return session.sql(f"SELECT * FROM {fq_table} ORDER BY PRIORITY").to_pandas()
 
 
 def _save_classifications(session, df: pd.DataFrame) -> int:
@@ -46,9 +48,10 @@ def _save_classifications(session, df: pd.DataFrame) -> int:
     Raises:
         Exception: Re-raised after ROLLBACK if the INSERT fails.
     """
+    fq_table = get_fq_names(session)["classification_table"]
     session.sql("BEGIN").collect()
     try:
-        session.sql(f"DELETE FROM {FQ_TABLE}").collect()
+        session.sql(f"DELETE FROM {fq_table}").collect()
 
         if not df.empty:
             # Build a VALUES clause from the DataFrame
@@ -62,7 +65,7 @@ def _save_classifications(session, df: pd.DataFrame) -> int:
 
             values_clause = ",\n".join(rows)
             session.sql(f"""
-                INSERT INTO {FQ_TABLE} (PRIORITY, PATTERN, SOURCE_FIELD, DISPLAY_NAME)
+                INSERT INTO {fq_table} (PRIORITY, PATTERN, SOURCE_FIELD, DISPLAY_NAME)
                 VALUES {values_clause}
             """).collect()
 
@@ -113,10 +116,14 @@ def run():
         st.dataframe(SAMPLE_DATA, hide_index=True, use_container_width=True)
         return
 
-    # Load current data
+    # Lazy-load: fetch from Snowflake only once per session.  The user can
+    # force a reload via the Reload button, which replaces this key.
     if "classifications_df" not in st.session_state:
         st.session_state["classifications_df"] = _load_classifications(session)
 
+    # Column configuration controls how the data_editor renders each field:
+    # Number for priority, text for pattern/display name, selectbox for the
+    # source field (constrained to the two valid column names).
     col_config = {
         "PRIORITY": st.column_config.NumberColumn("Priority", help="Lower = higher priority", min_value=0, step=1, width="small"),
         "PATTERN": st.column_config.TextColumn("Pattern", help="SQL ILIKE pattern (use % as wildcard, case-insensitive)", width="large"),
@@ -138,6 +145,9 @@ def run():
         key="classifications_editor",
     )
 
+    # --- Action buttons ---
+    # Three columns: Save (primary), Refresh (re-run stored proc), Reload
+    # (discard edits).  col3 is empty spacer to left-align the buttons.
     col1, col2, col3 = st.columns([1, 1, 4])
     with col1:
         save_clicked = st.button("Save Changes", type="primary", icon=":material/save:", help="Persist edits to the classification table in Snowflake")
@@ -150,6 +160,9 @@ def run():
     with col3:
         reload_clicked = st.button("Reload", help="Discard edits and reload from Snowflake", icon=":material/refresh:")
 
+    # --- Save handler ---
+    # Validates that no rows have empty Pattern or Display Name fields, then
+    # writes the full DataFrame to Snowflake via transactional DELETE + INSERT.
     if save_clicked:
         # Validate: no empty patterns or display names
         if edited_df["PATTERN"].isna().any() or (edited_df["PATTERN"] == "").any():
@@ -166,6 +179,10 @@ def run():
         except Exception as exc:
             st.error(f"Failed to save: {exc}")
 
+    # --- Refresh handler ---
+    # Re-runs the stored procedure that joins access data against the
+    # classification table.  This is needed after saving new rules so the
+    # Network Graph / Charts reflect the updated mappings.
     if refresh_clicked:
         with st.spinner("Running REFRESH_CONNECTION_ACCESS()... this may take a minute."):
             try:
@@ -177,6 +194,9 @@ def run():
             except Exception as exc:
                 st.error(f"Refresh failed: {exc}")
 
+    # --- Reload handler ---
+    # Discards any unsaved edits by re-fetching from Snowflake and forcing
+    # a full rerun so the data_editor picks up the fresh DataFrame.
     if reload_clicked:
         st.session_state["classifications_df"] = _load_classifications(session)
         st.rerun()

@@ -391,3 +391,33 @@ AS
 ```
 
 The `EXECUTE IMMEDIATE` + `$$` pattern is necessary because `CREATE TASK ... AS` expects a single SQL statement, and the anonymous `DECLARE`/`BEGIN`/`END` block contains semicolons that confuse the parser without dollar-quote delimiters.
+
+---
+
+## Streamlit-in-Snowflake Portability
+
+### Never hardcode database or schema names in Python runtime code
+
+When a Streamlit app is deployed as a Streamlit-in-Snowflake (SiS) object, it lives inside whatever database and schema the deployer chose — there is no guarantee it will be `CONNECTION_EXPLORER_APP_DB.APP`. Hardcoding the database name causes failures when:
+
+1. The app is deployed to a different database (e.g., `ANALYTICS_DB.DASHBOARDS`)
+2. The app's role lacks `CREATE DATABASE` privileges (common in production)
+3. Multiple instances are deployed to different schemas
+
+The fix is to derive the database/schema at runtime from the active session:
+
+```python
+@st.cache_data(show_spinner=False, ttl=3600)
+def get_fq_names(_session) -> dict:
+    row = _session.sql("SELECT CURRENT_DATABASE(), CURRENT_SCHEMA()").collect()[0]
+    db, schema = row[0], row[1]
+    fq_schema = f"{db}.{schema}"
+    return {
+        "access_table": f"{fq_schema}.connection_access_30d",
+        "classification_table": f"{fq_schema}.client_app_classification",
+    }
+```
+
+In SiS, the session's database/schema is set by the deployment target. Locally, it comes from the connection config in `secrets.toml`. This single function replaces all hardcoded `DB.SCHEMA.TABLE` references and ensures the app works in any installation.
+
+**Corollary**: The auto-setup code should NOT run `CREATE DATABASE` or `CREATE SCHEMA` — the database/schema must already exist (created by the deploy script or the SiS deployment). The app should only ensure its *tables* exist within the current context.

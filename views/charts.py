@@ -18,4 +18,8 @@ def run():
         st.info("No data to display. Adjust filters in the sidebar.")
         return
 
+    # All chart rendering (bar charts by dimension, client×database heatmap,
+    # access treemap, donut breakdowns, and Sankey flow diagrams) is handled
+    # by the components.charts module.  It receives the already-filtered
+    # DataFrame so it doesn't need to know about sidebar filter state.
     render_bar_charts(df)

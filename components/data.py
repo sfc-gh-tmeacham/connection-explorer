@@ -15,7 +15,7 @@ import pandas as pd
 import streamlit as st
 
 from components.client_mappings import CLIENT_ICON_FILES
-from components.setup import ensure_tables_exist
+from components.setup import ensure_tables_exist, get_fq_names
 
 
 @st.cache_data(show_spinner=False, ttl=3600)
@@ -299,9 +299,12 @@ def load_data(_session) -> pd.DataFrame:
         return sample_dataframe(_session)
     try:
         ensure_tables_exist(_session)
-        query = """
+        # Derive the access table name from the session's current DB/schema
+        # so the app works regardless of where it's deployed.
+        access_table = get_fq_names(_session)["access_table"]
+        query = f"""
             SELECT account_id AS ACCOUNT_NAME, * 
-            FROM CONNECTION_EXPLORER_APP_DB.APP.connection_access_30d 
+            FROM {access_table} 
             ORDER BY access_count DESC;
         """
 

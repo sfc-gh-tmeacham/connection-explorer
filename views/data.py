@@ -4,7 +4,9 @@ import streamlit as st
 
 from components.client_mappings import generate_client_icon_uri
 
-# Columns available for grouping (exclude ACCESS_COUNT since it's the measure)
+# Dimensions available for the "Group by" multiselect.  Maps user-friendly
+# labels to actual DataFrame column names.  ACCESS_COUNT is excluded because
+# it's the measure that gets summed during aggregation.
 GROUP_COLUMNS = {
     "Client": "CLIENT",
     "Warehouse": "WAREHOUSE",
@@ -13,7 +15,9 @@ GROUP_COLUMNS = {
     "Direction": "DIRECTION",
 }
 
-# Logical column order: CLIENT → WAREHOUSE → DATABASE → SCHEMA → DIRECTION → ACCESS_COUNT
+# Display order for table columns.  ICON is a generated image column prepended
+# when CLIENT is present; the rest follow the data's logical flow from client
+# through warehouse/database/schema to the access metric.
 COLUMN_ORDER = ["ICON", "CLIENT", "WAREHOUSE", "DATABASE", "SCHEMA_NAME", "DIRECTION", "ACCESS_COUNT"]
 
 
@@ -33,7 +37,9 @@ def run():
 
     st.markdown("### Access Data")
 
-    # Group-by selector
+    # --- Group-by selector ---
+    # Lets the user pivot the table by one or more dimensions.  When no
+    # groups are selected the raw filtered rows are shown as-is.
     group_by_labels = st.multiselect(
         "Group by",
         options=list(GROUP_COLUMNS.keys()),
@@ -41,11 +47,13 @@ def run():
         help="Select columns to group by. Access counts will be summed.",
     )
 
-    # Map labels to column names
+    # Translate user-friendly labels ("Client") back to DataFrame column names
+    # ("CLIENT") for the groupby operation.
     group_by_cols = [GROUP_COLUMNS[label] for label in group_by_labels]
 
     if group_by_cols:
-        # Aggregate data by selected columns
+        # Aggregate: sum ACCESS_COUNT per unique combination of selected
+        # dimensions, then sort highest-access groups first.
         display_df = (
             df.groupby(group_by_cols, as_index=False)["ACCESS_COUNT"]
             .sum()
@@ -56,15 +64,18 @@ def run():
         display_df = df.copy()
         row_label = "rows"
 
-    # Add client icon column if CLIENT column exists
+    # Prepend a small icon column when CLIENT is present.  The icon is a
+    # data-URI SVG generated from the client name (e.g. Snowpark, dbt, etc.).
     if "CLIENT" in display_df.columns:
         display_df["ICON"] = display_df["CLIENT"].apply(generate_client_icon_uri)
 
-    # Reorder columns to match logical flow
+    # Reorder columns to match the logical data flow defined in COLUMN_ORDER,
+    # dropping any that aren't present (e.g. ICON when CLIENT was grouped away).
     ordered_cols = [c for c in COLUMN_ORDER if c in display_df.columns]
     display_df = display_df[ordered_cols]
 
-    # Build column config
+    # Column config maps DataFrame columns to Streamlit column types for
+    # rendering (image for icons, formatted number for access counts, etc.).
     column_config = {
         "ICON": st.column_config.ImageColumn("", width="small"),
         "CLIENT": st.column_config.TextColumn("Client"),

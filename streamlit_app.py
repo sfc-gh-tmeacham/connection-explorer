@@ -19,16 +19,23 @@ from components.data import apply_filters, get_distinct_values, load_data, proce
 from components.network import render_network
 from components.theme import CUSTOM_CSS
 
-try:  # Streamlit in Snowflake automatically injects a Snowpark session
+# Snowpark session acquisition — dual-environment pattern:
+#   1. In Streamlit-in-Snowflake (SiS), a session is auto-injected via get_active_session().
+#   2. Locally, we fall back to st.connection() which reads .streamlit/secrets.toml.
+#   3. If neither works (e.g. no credentials configured), session is None and
+#      the app runs in demo mode with sample data.
+try:
     from snowflake.snowpark.context import get_active_session
     session = get_active_session()
-except Exception:  # Running locally — use st.connection from secrets.toml
+except Exception:
     try:
         conn = st.connection("snowflake")
         session = conn.session()
     except Exception:
         session = None
 
+# Sidebar starts collapsed so the network graph gets maximum viewport width
+# on first load.  Users can expand it to access filters.
 st.set_page_config(
     page_title="Snowflake Connection Explorer",
     page_icon=str(FAVICON_PATH),
@@ -139,7 +146,18 @@ def sidebar_filters(df):
 
 
 def main():
-    """Application entry point — orchestrates data loading, filtering, and routing."""
+    """Application entry point — orchestrates data loading, filtering, and page routing.
+
+    Initialises session-state defaults for all sidebar filter persist keys,
+    handles fullscreen mode (bypassing navigation to render a borderless
+    network graph), and in normal mode loads data, renders sidebar filters,
+    and sets up ``st.navigation`` with the Network Graph, Charts, Data, and
+    Classifications pages.  The filtered DataFrame and Snowflake session are
+    stored in ``st.session_state`` so page modules can access them.
+    """
+    # Default values for all persist_* session-state keys.  These keys store
+    # the user's current filter selections and survive Streamlit reruns.
+    # Each has a matching widget_* key that is bound to the actual widget.
     filter_defaults = {
         "persist_filter_database": [],
         "persist_filter_schema": [],
@@ -154,6 +172,10 @@ def main():
         if key not in st.session_state:
             st.session_state[key] = default
 
+    # Guard against persist keys that were stored as a bare string instead of
+    # a list (can happen with older session-state snapshots or click-to-filter
+    # writing a single value).  Normalise them to lists so multiselect widgets
+    # don't break.
     for key in (
         "persist_filter_database",
         "persist_filter_schema",
@@ -168,7 +190,12 @@ def main():
     is_fullscreen = st.session_state.get("full_screen_mode", False)
     logger.debug("App started — fullscreen=%s", is_fullscreen)
 
-    # --- Fullscreen mode bypasses navigation ---
+    # --- Fullscreen mode ---
+    # When the user clicks the fullscreen button on the Network Graph page,
+    # we bypass st.navigation entirely and render a borderless, chrome-free
+    # network graph that fills the viewport.  CSS hides the Streamlit header,
+    # sidebar, toolbar, and deploy button, then stretches the iframe to 100vw
+    # x 100vh.  A small exit button (top-right) restores normal mode.
     if is_fullscreen:
         st.markdown("""
             <style>
@@ -288,6 +315,9 @@ def main():
     st.sidebar.markdown("Built with Cortex Code :material/terminal:")
 
     # --- Page navigation ---
+    # Imports are deferred to here (rather than top-of-file) so that the
+    # fullscreen early-return path above doesn't pay for unnecessary module
+    # loads.  Each view module exposes a run() function registered as a Page.
     from views.network import run as network_page
     from views.charts import run as charts_page
     from views.data import run as data_page

@@ -1,7 +1,8 @@
-"""Auto-setup: create and seed Snowflake objects on first run.
+"""Auto-setup: ensure Snowflake tables exist and seed defaults on first run.
 
-Creates the ``CONNECTION_EXPLORER_APP_DB.APP`` schema, the
-``connection_access_30d`` access table, and the ``client_app_classification``
+Detects the current database and schema from the active Snowpark session
+(works in both Streamlit-in-Snowflake and local dev) and creates the
+``connection_access_30d`` access table and ``client_app_classification``
 lookup table if they do not already exist.  The classification table is
 seeded via MERGE from ``CLIENT_MAPPINGS`` so re-runs are idempotent.
 """
@@ -14,36 +15,77 @@ logger = logging.getLogger(__name__)
 
 from components.client_mappings import CLIENT_MAPPINGS
 
-DB = "CONNECTION_EXPLORER_APP_DB"
-SCHEMA = "APP"
-FQ_SCHEMA = f"{DB}.{SCHEMA}"
-FQ_ACCESS_TABLE = f"{FQ_SCHEMA}.connection_access_30d"
-FQ_CLASSIFICATION_TABLE = f"{FQ_SCHEMA}.client_app_classification"
+# Fallback database/schema used when no Snowflake session is available
+# (demo mode).  These match the deploy script defaults so that references
+# in log messages and sample-mode paths stay meaningful.
+_FALLBACK_DB = "CONNECTION_EXPLORER_APP_DB"
+_FALLBACK_SCHEMA = "APP"
+
+
+@st.cache_data(show_spinner=False, ttl=3600)
+def get_fq_names(_session) -> dict:
+    """Derive fully-qualified table names from the session's current context.
+
+    In Streamlit-in-Snowflake the session's database/schema is set by the
+    deployment target.  Locally, it comes from the connection config in
+    ``secrets.toml`` or ``connections.toml``.  This avoids hardcoding a
+    database name that may differ across installations.
+
+    Cached for 1 hour — the database/schema context doesn't change mid-session.
+
+    Args:
+        _session: A Snowpark ``Session`` object, or ``None`` (demo mode).
+
+    Returns:
+        A dict with keys ``"schema"`` (``DB.SCHEMA``), ``"access_table"``,
+        and ``"classification_table"`` containing fully-qualified names.
+    """
+    if _session is None:
+        fq_schema = f"{_FALLBACK_DB}.{_FALLBACK_SCHEMA}"
+        return {
+            "schema": fq_schema,
+            "access_table": f"{fq_schema}.connection_access_30d",
+            "classification_table": f"{fq_schema}.client_app_classification",
+        }
+
+    row = _session.sql("SELECT CURRENT_DATABASE(), CURRENT_SCHEMA()").collect()[0]
+    db, schema = row[0], row[1]
+    fq_schema = f"{db}.{schema}"
+    logger.info("Resolved FQ schema: %s", fq_schema)
+    return {
+        "schema": fq_schema,
+        "access_table": f"{fq_schema}.connection_access_30d",
+        "classification_table": f"{fq_schema}.client_app_classification",
+    }
 
 
 @st.cache_data(show_spinner=False, ttl=3600)
 def ensure_tables_exist(_session) -> None:
-    """Create required Snowflake objects and seed the classification lookup.
+    """Create required tables and seed the classification lookup.
 
-    Idempotent -- safe to call on every app load.  Runs once per hour via
-    ``st.cache_data`` TTL.  If the session lacks required privileges, a
-    warning is shown and execution continues gracefully.
+    Idempotent — safe to call on every app load.  Runs once per hour via
+    ``st.cache_data`` TTL.  The database and schema are assumed to already
+    exist (created by the deploy script or the SiS deployment target).
+    If the session lacks required privileges, a warning is shown and
+    execution continues gracefully.
 
     Args:
-        session: A Snowpark ``Session`` object, or ``None`` (in which case
+        _session: A Snowpark ``Session`` object, or ``None`` (in which case
             the function returns immediately).
     """
     if _session is None:
         return
 
-    try:
-        # --- database & schema ---
-        _session.sql(f"CREATE DATABASE IF NOT EXISTS {DB}").collect()
-        _session.sql(f"CREATE SCHEMA IF NOT EXISTS {FQ_SCHEMA}").collect()
+    names = get_fq_names(_session)
+    fq_access = names["access_table"]
+    fq_classification = names["classification_table"]
 
-        # --- access data table ---
+    try:
+        # --- Access data table ---
+        # Stores the 30-day connection access rollup produced by the
+        # REFRESH_CONNECTION_ACCESS() stored procedure.
         _session.sql(f"""
-            CREATE TABLE IF NOT EXISTS {FQ_ACCESS_TABLE} (
+            CREATE TABLE IF NOT EXISTS {fq_access} (
                 organization_name VARCHAR,
                 account_id        VARCHAR,
                 client            VARCHAR,
@@ -55,9 +97,12 @@ def ensure_tables_exist(_session) -> None:
             )
         """).collect()
 
-        # --- classification lookup table ---
+        # --- Classification lookup table ---
+        # Maps raw CLIENT_APPLICATION_ID / APPLICATION values to friendly
+        # display names via ILIKE patterns.  Priority determines evaluation
+        # order (lower = first match wins).
         _session.sql(f"""
-            CREATE TABLE IF NOT EXISTS {FQ_CLASSIFICATION_TABLE} (
+            CREATE TABLE IF NOT EXISTS {fq_classification} (
                 priority       NUMBER,
                 pattern        VARCHAR,
                 source_field   VARCHAR,
@@ -65,15 +110,18 @@ def ensure_tables_exist(_session) -> None:
             )
         """).collect()
 
-        # Seed: MERGE so re-runs don't duplicate rows.
-        # Build a VALUES clause from CLIENT_MAPPINGS.
+        # --- Seed classification rules ---
+        # Uses MERGE (match on pattern + source_field) so re-runs are
+        # idempotent: existing rows are left untouched, only missing rules
+        # from CLIENT_MAPPINGS are inserted.  This preserves any user edits
+        # made via the Classifications page.
         values_rows = ",\n".join(
             f"({i}, '{pat}', '{src}', '{name}')"
             for i, (pat, src, name) in enumerate(CLIENT_MAPPINGS)
         )
 
         _session.sql(f"""
-            MERGE INTO {FQ_CLASSIFICATION_TABLE} AS tgt
+            MERGE INTO {fq_classification} AS tgt
             USING (
                 SELECT
                     column1 AS priority,
