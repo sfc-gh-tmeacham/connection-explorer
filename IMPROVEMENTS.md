@@ -24,7 +24,4 @@
 
 - [ ] **No Tests** — Zero test coverage. The data processing, filtering, and client classification logic are all testable but untested.
 
-- [ ] **Missing Date/Time Context** — The data covers 30 days but there is no date column exposed in the UI. Users cannot see trends over time or filter by date range.
-
-- [ ] **Caching Could Cause Stale Data** — `load_data()` has a 5-minute TTL, but `process_dataframe()` has no TTL at all (cached forever until manual refresh). If underlying data changes, processed results go stale.
 
