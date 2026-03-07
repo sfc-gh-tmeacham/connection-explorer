@@ -324,3 +324,16 @@ classified AS (
 ```
 
 This "split-join" approach converts two OR branches into two sequential joins, each with a single equality predicate on `source_field`. The optimizer can now use equality filters efficiently, avoiding the cartesian product. For accounts with high query volumes (millions of rows in `query_history`), this can reduce execution time dramatically.
+
+### Stored procedure `CREATE OR ALTER` deploys to the current database/schema context
+
+`CREATE OR ALTER PROCEDURE` creates the procedure in whatever `DATABASE.SCHEMA` is active in the session — not in the database where a previous version existed. If your Snowflake session context drifts (e.g., Cortex Code defaults to `SNOWFLAKE_INTELLIGENCE.AGENTS`), you'll silently create a duplicate procedure in the wrong schema while the old version keeps running. Always run `USE DATABASE` / `USE SCHEMA` immediately before `CREATE OR ALTER PROCEDURE`.
+
+### `SYSTEM$LOG_INFO` / `SYSTEM$LOG_ERROR` for stored procedure observability
+
+Snowflake SQL stored procedures support `SYSTEM$LOG_INFO()`, `SYSTEM$LOG_ERROR()`, etc. for structured logging to an event table. Key requirements:
+
+1. **Event table**: Must be configured at the account level (`ALTER ACCOUNT SET EVENT_TABLE = '<db.schema.table>'`). Without it, log calls succeed silently but nothing is persisted.
+2. **LOG_LEVEL**: Set on the procedure via `ALTER PROCEDURE ... SET LOG_LEVEL = INFO` to control which severity levels are captured.
+3. **EXCEPTION block**: Wrap the procedure body in `BEGIN ... EXCEPTION WHEN OTHER THEN ... END` to log errors before re-raising. Use `:SQLCODE` and `:SQLERRM` (with colon prefix) to access error details.
+4. **Variable references in SQL**: Inside `SELECT ... INTO :var` and string concatenation, variables declared in `DECLARE` must use the colon prefix (`:row_count`, `:result_msg`).

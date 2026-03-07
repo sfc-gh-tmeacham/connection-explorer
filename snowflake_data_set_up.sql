@@ -77,12 +77,20 @@ CREATE TABLE IF NOT EXISTS client_app_classification (
 
 -- Create the refresh stored procedure
 -- Now uses the client_app_classification lookup table instead of a CASE/WHEN block.
+-- Logging requires an event table configured at the account level:
+--   CREATE EVENT TABLE IF NOT EXISTS <db>.<schema>.<table>;
+--   ALTER ACCOUNT SET EVENT_TABLE = '<db>.<schema>.<table>';
 CREATE OR ALTER PROCEDURE REFRESH_DATA_LAKE_ACCESS()
 RETURNS STRING
 LANGUAGE SQL
 AS
 $$
+DECLARE
+    row_count INTEGER;
+    result_msg VARCHAR;
 BEGIN
+    SYSTEM$LOG_INFO('REFRESH_DATA_LAKE_ACCESS: Starting data refresh');
+
     INSERT OVERWRITE INTO data_lake_access_30d (
         organization_name, account_id, client, warehouse, 
         database, schema_name, direction, access_count
@@ -182,7 +190,7 @@ BEGIN
                  OR query_type LIKE 'TRUNCATE%' 
                  OR query_type LIKE 'RENAME%' 
                  OR query_type LIKE 'UNDROP%'
-                 OR query_type = 'COMMENT' 
+                 OR query_type IN ('COMMENT', 'GRANT', 'REVOKE', 'RESTORE')
             THEN 'DDL'
             WHEN query_type LIKE 'SHOW%' OR query_type LIKE 'DESCRIBE%' OR query_type IN ('DESC', 'LIST_FILES', 'EXPLAIN') THEN 'metadata'
             WHEN query_type IN ('SELECT', 'UNLOAD', 'GET_FILES') THEN 'read'
@@ -192,10 +200,22 @@ BEGIN
         COUNT(DISTINCT query_id) AS access_count
     FROM raw_access
     GROUP BY ALL;
-    
-    RETURN 'Data lake access data refreshed successfully';
+
+    -- Log the row count after the refresh
+    SELECT COUNT(*) INTO :row_count FROM data_lake_access_30d;
+    result_msg := 'Data lake access data refreshed successfully. Rows: ' || :row_count;
+    SYSTEM$LOG_INFO('REFRESH_DATA_LAKE_ACCESS: ' || :result_msg);
+
+    RETURN result_msg;
+EXCEPTION
+    WHEN OTHER THEN
+        SYSTEM$LOG_ERROR('REFRESH_DATA_LAKE_ACCESS: Failed with SQLCODE=' || :SQLCODE || ' — ' || :SQLERRM);
+        RAISE;
 END;
 $$;
+
+-- Enable INFO-level logging so SYSTEM$LOG_INFO messages are captured
+ALTER PROCEDURE REFRESH_DATA_LAKE_ACCESS() SET LOG_LEVEL = INFO;
 
 -- Suspend the task if it already exists (required before CREATE OR ALTER)
 ALTER TASK IF EXISTS DATA_ACCESS_REFRESH_TASK SUSPEND;
