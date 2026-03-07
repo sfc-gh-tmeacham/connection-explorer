@@ -91,6 +91,48 @@ DECLARE
 BEGIN
     SYSTEM$LOG_INFO('REFRESH_DATA_LAKE_ACCESS: Starting data refresh');
 
+    /*
+     * Pipeline overview
+     * =================
+     * Joins sessions → query_history → access_history to build a 30-day
+     * snapshot of which clients accessed which databases/schemas, via
+     * which warehouses, and whether the access was read or write.
+     *
+     * CTE chain:
+     *   raw_sessions     – Flattens direct_objects_accessed, extracts
+     *                       database and qualified schema name from each
+     *                       objectName.  Filters out noise:
+     *                         • CALL statements (app function invocations)
+     *                         • Session/transaction commands (BEGIN, SET, USE…)
+     *                         • SYSTEM% client apps (internal Snowflake processes)
+     *                         • USER$% temp databases (query result caches)
+     *                         • APP!FUNC names (app-qualified function calls like
+     *                           BENCH_V2!SPCS_GET_LOGS — these use '!' not '.'
+     *                           and would produce bogus DB/schema nodes)
+     *                       schema_name is NULL when objectName has no dots
+     *                       (bare database-level access like SHOW/DESCRIBE).
+     *
+     *   matched_by_*     – Two-pass classification against the
+     *                       client_app_classification lookup table.  First
+     *                       matches on client_app_id patterns, then on
+     *                       application (from CLIENT_ENVIRONMENT JSON).
+     *                       Split into two LEFT JOINs to avoid an OR-join
+     *                       that would force a cartesian product.
+     *
+     *   classified       – Picks the best classification match per
+     *                       (query_id, database, schema_name) by lowest
+     *                       priority value.  ROW_NUMBER deduplicates when
+     *                       multiple patterns match.
+     *
+     *   raw_access       – Resolves the final client display name:
+     *                       classification match → application field →
+     *                       raw client_application_id as last resort.
+     *
+     *   Final SELECT     – Categorises query_type into direction
+     *                       (read/write/DDL/metadata) and aggregates
+     *                       distinct query counts per route.
+     */
+
     INSERT OVERWRITE INTO data_lake_access_30d (
         organization_name, account_id, client, warehouse, 
         database, schema_name, direction, access_count
@@ -105,7 +147,10 @@ BEGIN
             q.query_type,
             q.query_id,
             SPLIT_PART(t.VALUE:objectName::VARCHAR, '.', 1) AS database,
-            SPLIT_PART(t.VALUE:objectName::VARCHAR, '.', 1) || '.' || SPLIT_PART(t.VALUE:objectName::VARCHAR, '.', 2) AS schema_name
+            CASE WHEN SPLIT_PART(t.VALUE:objectName::VARCHAR, '.', 2) != ''
+                 THEN SPLIT_PART(t.VALUE:objectName::VARCHAR, '.', 1) || '.' || SPLIT_PART(t.VALUE:objectName::VARCHAR, '.', 2)
+                 ELSE NULL
+            END AS schema_name
         FROM snowflake.account_usage.sessions s
         INNER JOIN snowflake.account_usage.query_history q 
             ON q.session_id = s.session_id
@@ -117,6 +162,7 @@ BEGIN
             AND q.query_type NOT IN ('BEGIN_TRANSACTION', 'COMMIT', 'ROLLBACK', 'SET', 'UNSET', 'USE')
             AND s.client_application_id NOT LIKE 'SYSTEM%'
             AND SPLIT_PART(t.VALUE:objectName::VARCHAR, '.', 1) NOT LIKE 'USER$%'
+            AND t.VALUE:objectName::VARCHAR NOT LIKE '%!%'
     ),
     -- Split-join approach for better performance with large query volumes.
     -- Step 1: Match on client_app_id patterns only

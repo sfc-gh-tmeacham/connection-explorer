@@ -329,6 +329,33 @@ This "split-join" approach converts two OR branches into two sequential joins, e
 
 `CREATE OR ALTER PROCEDURE` creates the procedure in whatever `DATABASE.SCHEMA` is active in the session — not in the database where a previous version existed. If your Snowflake session context drifts (e.g., Cortex Code defaults to `SNOWFLAKE_INTELLIGENCE.AGENTS`), you'll silently create a duplicate procedure in the wrong schema while the old version keeps running. Always run `USE DATABASE` / `USE SCHEMA` immediately before `CREATE OR ALTER PROCEDURE`.
 
+### `SPLIT_PART` returns empty string, not NULL, for missing parts
+
+`SPLIT_PART(value, '.', 2)` returns `''` (empty string) — not NULL — when the delimiter isn't found. This means naive concatenation like `SPLIT_PART(x, '.', 1) || '.' || SPLIT_PART(x, '.', 2)` produces `'TOM.'` instead of just `'TOM'` when the input is a bare name with no dots.
+
+Guard with a CASE:
+
+```sql
+CASE WHEN SPLIT_PART(objectName, '.', 2) != ''
+     THEN SPLIT_PART(objectName, '.', 1) || '.' || SPLIT_PART(objectName, '.', 2)
+     ELSE NULL
+END AS schema_name
+```
+
+This commonly affects `access_history.direct_objects_accessed` where `objectName` can be a bare database name (no schema qualifier) for metadata-level access like `SHOW` or `DESCRIBE` commands.
+
+### App-qualified function names in `access_history` are not table references
+
+Snowflake's `access_history.direct_objects_accessed` includes application-qualified function calls (e.g., `BENCH_V2!SPCS_GET_LOGS`, `TB_REC_SERVICE_DEMO_PREDICT!FORWARD`) alongside normal `DB.SCHEMA.TABLE` references. These use `APP_NAME!FUNCTION_NAME` format with an exclamation mark instead of dots.
+
+When you `SPLIT_PART(objectName, '.', 1)` on these, the entire string lands in the database column (since there are no dots), creating bogus nodes in the network graph (e.g., "Schema: BENCH_V2!SPCS_GET_LOGS"). The fix is to exclude them in the WHERE clause:
+
+```sql
+AND t.VALUE:objectName::VARCHAR NOT LIKE '%!%'
+```
+
+These entries come from SPCS log/event retrieval, performance explorer queries, anomaly insights setup, and other native app function invocations. They represent function calls, not data access, so excluding them is semantically correct.
+
 ### `SYSTEM$LOG_INFO` / `SYSTEM$LOG_ERROR` for stored procedure observability
 
 Snowflake SQL stored procedures support `SYSTEM$LOG_INFO()`, `SYSTEM$LOG_ERROR()`, etc. for structured logging to an event table. Key requirements:

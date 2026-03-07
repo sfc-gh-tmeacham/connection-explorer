@@ -67,4 +67,4 @@ def run():
         hide_databases=hide_db, hide_schemas=hide_sc, cluster_databases=cluster_db,
     )
 
-    st.caption("Excludes CALL statements, session/transaction commands, system processes, and temporary objects.")
+    st.caption("Excludes CALL statements, application function calls, session/transaction commands, system processes, and temporary objects.")
