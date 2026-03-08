@@ -58,8 +58,15 @@
 - **Client Application Editor**: View and edit the `CLIENT_APP_CLASSIFICATION` table that maps raw client strings to friendly display names
 - **Inline Editing**: Update classification entries directly in the app with changes written back to Snowflake
 
+### About Page
+- **Built with Cortex Code**: Productivity showcase comparing manual vs AI-assisted development time
+- **Animated CSS Bar Chart**: Side-by-side comparison of manual hours vs Cortex Code hours per component
+- **Capability Cards**: Code generation highlights and knowledge/research areas with SVG icons
+- **Project at a Glance**: 8-stat grid showing files, LOC, commits, tests, and more
+- **Call to Action**: Animated CTA with floating orbs and gradient button linking to Cortex Code
+
 ### General
-- **Multi-Page Navigation**: Separate pages for Network Graph, Charts, Data, and Classifications with top-of-page navigation
+- **Multi-Page Navigation**: Separate pages for Network Graph, Charts, Data, Classifications, and About with top-of-page navigation
 - **Real-time Data**: Pulls from Snowflake's `account_usage` views via Horizon Catalog
 - **Smart Client Detection**: Automatically identifies 60+ application types
 - **Flexible Filtering**: Filter by database, schema, warehouse, client, organization, direction, and access count
@@ -250,7 +257,7 @@ Deploy entirely through the Snowflake web UI. No local tooling needed — just a
    | `streamlit_app.py` | `streamlit_app.py` (root) |
    | `pyproject.toml` | `pyproject.toml` (root) |
    | `components/__init__.py`, `theme.py`, `assets.py`, `data.py`, `network.py`, `charts.py`, `client_mappings.py`, `setup.py` | `components/` |
-   | `views/__init__.py`, `network.py`, `charts.py`, `data.py`, `classifications.py` | `views/` |
+    | `views/__init__.py`, `network.py`, `charts.py`, `data.py`, `classifications.py`, `about.py` | `views/` |
    | All `.svg` files in `static/` and `static/client-icons/` | `static/` and `static/client-icons/` |
 
 2. Upload `streamlit_app.py` last (or click **Run** after all files are uploaded) to avoid partial-load errors.
@@ -335,7 +342,8 @@ data-lake-explorer/
 │   ├── network.py                # Network graph page
 │   ├── charts.py                 # Charts page (bars, Sankey, heatmaps, treemap)
 │   ├── data.py                   # Data table page with group-by
-│   └── classifications.py        # Client classification editor page
+│   ├── classifications.py        # Client classification editor page
+│   └── about.py                  # About page — Cortex Code productivity showcase
 ├── components/                   # Shared components and logic
 │   ├── network.py                # vis.js network rendering (inline HTML/JS)
 │   ├── charts.py                 # Plotly chart builders
