@@ -213,9 +213,23 @@ except Exception:
     session = None
 ```
 
-### `snowflake.yml` must list all files
+### `snowflake.yml` artifacts support glob patterns (but not `**`)
 
-Every file referenced by the app (Python modules, SVG icons, CSS) must be listed in `snowflake.yml` under the stage artifacts. Missing files will cause import errors or broken assets when deployed.
+Snowflake CLI v3.x (`definition_version: 2`) supports single-level `*` glob patterns in the Streamlit artifacts list. This eliminates the need to manually enumerate every file:
+
+```yaml
+artifacts:
+  - streamlit_app.py
+  - pyproject.toml
+  - components/*.py
+  - views/*.py
+  - static/*.svg
+  - static/client-icons/*.svg
+```
+
+**Caveat**: Recursive `**` globs are NOT supported. Each directory level needs its own glob entry. If you add a new subdirectory (e.g., `static/icons/new-category/`), you must add a corresponding glob line.
+
+Any file referenced by the app at runtime that isn't matched by an artifact glob will cause `FileNotFoundError` when deployed to the container runtime (`/opt/streamlit-runtime/`).
 
 ---
 
@@ -429,3 +443,22 @@ Streamlit container runtime (`SYSTEM$ST_CONTAINER_RUNTIME_PY3_11`) runs inside a
 CSS `@import url('https://fonts.googleapis.com/...')` silently fails, leaving the page with no custom font loaded. The fix is to either remove the `@import` and rely on system font fallbacks already in the `font-family` stack, or bundle font files as static assets. Removing is simpler; the visual difference is negligible since system fonts (`-apple-system`, `BlinkMacSystemFont`, `sans-serif`) render well.
 
 This also means any library that fetches resources from a CDN at runtime (e.g., Plotly loading MathJax, vis.js loaded from unpkg) will break. Always verify that dependencies load from local/bundled files, not remote URLs.
+
+### CSP blocks `eval()` and `new Function()` in Snowflake container runtime
+
+Snowflake's Streamlit container runtime enforces a strict Content Security Policy that does **not** include `unsafe-eval`. This means `eval()`, `new Function()`, and `setTimeout('code', 0)` all fail with a CSP violation error:
+
+> "Evaluating a string as JavaScript violates the following Content Security Policy directive because 'unsafe-eval' is not an allowed source of script"
+
+This is a problem when loading UMD libraries (like vis-network.js) that are typically injected as strings and evaluated at runtime. The fix is to **concatenate the library source directly** before the `export default function` in the BidiComponent JS — the same pattern Streamlit's docs use for Tailwind CSS:
+
+```python
+JS = (
+    LIBRARY_SOURCE_CODE
+    + """
+        export default function(component) { ... }
+    """
+)
+```
+
+UMD wrappers that use `globalThis` (available in all modern browsers since 2020) will correctly set their globals even inside an ES module, where top-level `this` is `undefined`. The vis-network.js UMD checks `globalThis` first, so it attaches to `window.vis` without any eval.

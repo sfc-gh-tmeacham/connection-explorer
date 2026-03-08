@@ -7,7 +7,7 @@ layout.  Custom tooltips are driven by vis.js hover events because the
 built-in tooltip mechanism is unavailable inside Components v2.
 """
 
-import json
+
 import logging
 import math
 import os
@@ -420,9 +420,9 @@ def _build_js() -> str:
 
     Concatenates the vis-network UMD bundle with custom component code
     that handles network creation, click-to-filter, custom
-    tooltips, and database clustering.  The vis.js source is injected as
-    a JSON string literal so it can be evaluated at runtime via the
-    ``Function`` constructor.
+    tooltips, and database clustering.  The vis.js source is prepended
+    directly so its UMD wrapper executes during module evaluation
+    (CSP-safe — no ``eval`` or ``new Function``).
 
     Returns:
         A single JavaScript module string ready to be passed to
@@ -430,16 +430,11 @@ def _build_js() -> str:
     """
     vis_js_code = _load_vis_js()
 
-    # We load vis.js by evaluating it in a way that sets window.vis.
-    # The UMD wrapper in vis-network.min.js checks for `this` context.
-    # We use Function() constructor to execute it with `this` = window.
-    component_js = r"""
-// --- Inject vis-network.js as a global (UMD) ---
-if (!window.vis || !window.vis.Network) {
-    const VIS_JS_CODE = VIS_JS_PLACEHOLDER;
-    new Function(VIS_JS_CODE).call(window);
-}
-
+    # Prepend vis.js source directly before the export default function.
+    # The UMD wrapper detects globalThis (available in all modern browsers)
+    # and sets window.vis without needing eval/new Function.
+    # This follows the same pattern Streamlit docs use for Tailwind CSS.
+    component_js = vis_js_code + "\n" + r"""
 export default function(component) {
     const { data, setTriggerValue, setStateValue, parentElement } = component;
     if (!data || !data.nodes) return;
@@ -987,10 +982,7 @@ export default function(component) {
 }
 """
 
-    # Inject vis.js code as a JSON string literal into the placeholder
-    escaped_vis = json.dumps(vis_js_code)
-    final_js = component_js.replace("VIS_JS_PLACEHOLDER", escaped_vis)
-    return final_js
+    return component_js
 
 
 # ---------------------------------------------------------------------------
