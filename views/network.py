@@ -1,0 +1,85 @@
+"""Network Graph page — interactive vis.js network visualization."""
+
+import streamlit as st
+
+from components.assets import load_node_images
+from components.network import render_network
+
+
+def run():
+    """Render the Network Graph page with vis.js visualization.
+
+    Reads the filtered DataFrame from ``st.session_state["filtered_df"]``
+    and renders an interactive force-directed graph.  Provides toggle
+    checkboxes to hide/show node types (warehouses, clients, databases,
+    schemas) with an "at least 2 visible" constraint, a database
+    clustering toggle, and a fullscreen button.
+    """
+    df = st.session_state.get("filtered_df")
+    if df is None or df.empty:
+        st.info("No data to display. Adjust filters in the sidebar.")
+        return
+
+    node_images = load_node_images()
+    session = st.session_state.get("snowflake_session")
+
+    title_col, toggle_col, btn_col = st.columns([5, 4.5, 0.5])
+    with title_col:
+        st.markdown(
+            '<div style="padding-left: 50px;"><span class="network-title">Network Graph</span></div>',
+            unsafe_allow_html=True,
+        )
+    with toggle_col:
+        tc1, tc2, tc3, tc4, tc5 = st.columns(5)
+
+        # Read current hide states to enforce "at least 2 visible" constraint.
+        # If two are already hidden, the others are disabled.
+        cur_hide_wh = st.session_state.get("hide_warehouses", True)
+        cur_hide_cl = st.session_state.get("hide_clients", False)
+        cur_hide_db = st.session_state.get("hide_databases", False)
+        cur_hide_sc = st.session_state.get("hide_schemas", False)
+        hidden_count = sum([cur_hide_wh, cur_hide_cl, cur_hide_db, cur_hide_sc])
+        max_hidden = hidden_count >= 2
+
+        with tc1:
+            hide_wh = st.checkbox(
+                "Hide Warehouses", key="hide_warehouses", value=True,
+                disabled=max_hidden and not cur_hide_wh,
+                help="Remove warehouse nodes from the network graph",
+            )
+        with tc2:
+            hide_cl = st.checkbox(
+                "Hide Clients", key="hide_clients",
+                disabled=max_hidden and not cur_hide_cl,
+                help="Remove client application nodes from the network graph",
+            )
+        with tc3:
+            hide_db = st.checkbox(
+                "Hide Databases", key="hide_databases",
+                disabled=max_hidden and not cur_hide_db,
+                help="Remove database nodes from the network graph",
+            )
+        with tc4:
+            hide_sc = st.checkbox(
+                "Hide Schemas", key="hide_schemas",
+                disabled=max_hidden and not cur_hide_sc,
+                help="Remove schema nodes from the network graph",
+            )
+        with tc5:
+            cluster_db = st.checkbox(
+                "Cluster Databases", key="cluster_databases",
+                help="Group schema nodes under their parent database",
+            )
+    with btn_col:
+        st.markdown('<div class="fullscreen-btn-container"></div>', unsafe_allow_html=True)
+        if st.button("", help="Full Screen", icon=":material/fullscreen:"):
+            st.session_state["full_screen_mode"] = True
+            st.rerun()
+
+    render_network(
+        df, node_images, session,
+        fullscreen=False, hide_warehouses=hide_wh, hide_clients=hide_cl,
+        hide_databases=hide_db, hide_schemas=hide_sc, cluster_databases=cluster_db,
+    )
+
+    st.caption("Excludes CALL statements, application function calls, session/transaction commands, system processes, and temporary objects.")

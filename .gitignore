@@ -67,6 +67,7 @@ connection.json
 connection*.json
 *.pem
 *.p8
+output/
 
 # IDE
 .idea/
