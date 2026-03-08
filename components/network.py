@@ -616,9 +616,12 @@ export default function(component) {
         const connectedEdgeIds = [];
         const allEdges = edges.get();
         for (let i = 0; i < allEdges.length; i++) {
-            if (allEdges[i].pathIndex !== undefined &&
-                connectedPathIndices.indexOf(allEdges[i].pathIndex) !== -1) {
-                connectedEdgeIds.push(allEdges[i].id);
+            var ePaths = allEdges[i].pathIndices || (allEdges[i].pathIndex !== undefined ? [allEdges[i].pathIndex] : []);
+            for (let j = 0; j < ePaths.length; j++) {
+                if (connectedPathIndices.indexOf(ePaths[j]) !== -1) {
+                    connectedEdgeIds.push(allEdges[i].id);
+                    break;
+                }
             }
         }
         return { connectedNodes: connectedNodes, connectedEdgeIds: connectedEdgeIds };
@@ -1080,24 +1083,21 @@ def render_network(df: pd.DataFrame, _node_images: Dict[str, str],
     }
     shape_props = {"useBorderWithImage": True, "borderType": "circle"}
 
-    def _add_edge(src, dst, ac, edge_color, title, path_idx):
-        """Append a directed edge dict to the ``edges`` list.
+    # Accumulator for deduplicating edges: (src, dst, is_write) → {ac, path_indices}
+    edge_acc: Dict[tuple, dict] = {}
 
-        Args:
-            src: Source node ID.
-            dst: Target node ID.
-            ac: Access count (used as edge weight/value).
-            edge_color: CSS color string for the edge.
-            title: Tooltip text shown on hover.
-            path_idx: Index into the ``paths`` list linking this edge
-                back to its full client-warehouse-database-schema path.
-        """
-        edges.append({
-            "id": f"e{len(edges)}", "from": src, "to": dst,
-            "value": ac, "color": edge_color, "arrows": "to",
-            "arrowStrikethrough": False, "title": title,
-            "pathIndex": path_idx,
-        })
+    def _accumulate_edge(src, dst, ac, is_write, path_idx):
+        """Accumulate edge data, merging duplicates by (src, dst, direction)."""
+        key = (src, dst, is_write)
+        if key in edge_acc:
+            edge_acc[key]["ac"] += ac
+            edge_acc[key]["path_indices"].append(path_idx)
+        else:
+            edge_acc[key] = {
+                "ac": ac,
+                "color": AMBER if is_write else READ_GREEN,
+                "path_indices": [path_idx],
+            }
 
     for _, row in agg_df.iterrows():
         database = row["DATABASE"]
@@ -1176,14 +1176,10 @@ def render_network(df: pd.DataFrame, _node_images: Dict[str, str],
         # --- Edge topology ---
         # Full chain: CLIENT → WAREHOUSE → DATABASE → SCHEMA
         # When one node type is hidden its neighbours connect directly.
-        # Build a list of visible node ids in chain order, then create
-        # edges between consecutive pairs.
         is_write = direction in ("write", "DML", "DDL")
-        edge_color = AMBER if is_write else READ_GREEN
-        dir_label = direction.upper() if direction else "READ"
         path_idx = len(paths)
 
-        # Ordered chain of (node_id, hidden_flag)
+        # Ordered chain of visible node IDs
         chain = []
         if not hide_clients:
             chain.append(client)
@@ -1202,39 +1198,26 @@ def render_network(df: pd.DataFrame, _node_images: Dict[str, str],
         path_sc = schema_id if (not hide_schemas and schema_id) else (chain[-1] if chain else database)
         paths.append([path_client, path_wh, path_db, path_sc])
 
-        # Build tooltip showing full path
-        visible_names = []
-        if not hide_clients:
-            visible_names.append(client)
-        if not hide_warehouses:
-            visible_names.append(warehouse)
-        if not hide_databases:
-            visible_names.append(database)
-        if not hide_schemas and schema_short:
-            visible_names.append(schema_short)
-        edge_title = " → ".join(visible_names) + f"\nDirection: {dir_label}\nAccess Count: {ac:,}"
-
-        # Hidden node info in tooltip
-        hidden_parts = []
-        if hide_clients:
-            hidden_parts.append(f"Client: {client}")
-        if hide_warehouses:
-            hidden_parts.append(f"Warehouse: {warehouse}")
-        if hide_databases:
-            hidden_parts.append(f"Database: {database}")
-        if hide_schemas and schema_name:
-            hidden_parts.append(f"Schema: {schema_id}")
-        if hidden_parts:
-            edge_title += "\n" + "\n".join(hidden_parts)
-
-        # Create edges between consecutive visible nodes
+        # Accumulate edges between consecutive visible nodes (deduplicated)
         if len(chain) >= 2:
             if is_write:
                 for i in range(len(chain) - 1):
-                    _add_edge(chain[i], chain[i + 1], ac, edge_color, edge_title, path_idx)
+                    _accumulate_edge(chain[i], chain[i + 1], ac, is_write, path_idx)
             else:
                 for i in range(len(chain) - 1, 0, -1):
-                    _add_edge(chain[i], chain[i - 1], ac, edge_color, edge_title, path_idx)
+                    _accumulate_edge(chain[i], chain[i - 1], ac, is_write, path_idx)
+
+    # Build final edges list from the accumulator — at most 2 edges
+    # (1 read + 1 write) between any pair of nodes.
+    for (src, dst, is_write), info in edge_acc.items():
+        dir_label = "WRITE" if is_write else "READ"
+        edge_title = f"{src} → {dst}\nDirection: {dir_label}\nAccess Count: {info['ac']:,}"
+        edges.append({
+            "id": f"e{len(edges)}", "from": src, "to": dst,
+            "value": info["ac"], "color": info["color"], "arrows": "to",
+            "arrowStrikethrough": False, "title": edge_title,
+            "pathIndices": info["path_indices"],
+        })
 
     clusters = {label: members for label, members in cluster_members.items() if members}
 
