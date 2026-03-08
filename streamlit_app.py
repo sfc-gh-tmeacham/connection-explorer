@@ -290,7 +290,8 @@ def main():
         hide_db = st.session_state.get("hide_databases", False)
         hide_sc = st.session_state.get("hide_schemas", False)
         cluster_db = st.session_state.get("cluster_databases", False)
-        render_network(filtered_df, node_images, session, fullscreen=True, hide_warehouses=hide_wh, hide_clients=hide_cl, hide_databases=hide_db, hide_schemas=hide_sc, cluster_databases=cluster_db)
+        combine_rw = st.session_state.get("combine_rw", True)
+        render_network(filtered_df, node_images, session, fullscreen=True, hide_warehouses=hide_wh, hide_clients=hide_cl, hide_databases=hide_db, hide_schemas=hide_sc, cluster_databases=cluster_db, combine_rw=combine_rw)
         return
 
     # --- Normal mode ---

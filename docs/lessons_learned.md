@@ -1,6 +1,6 @@
 # Lessons Learned
 
-Key insights from building the Data Lake Explorer Streamlit application.
+Key insights from building the Connection Explorer Streamlit application.
 
 ---
 
@@ -462,3 +462,22 @@ JS = (
 ```
 
 UMD wrappers that use `globalThis` (available in all modern browsers since 2020) will correctly set their globals even inside an ES module, where top-level `this` is `undefined`. The vis-network.js UMD checks `globalThis` first, so it attaches to `window.vis` without any eval.
+
+---
+
+## Edge Deduplication in Directed Graphs
+
+### Direction-dependent keys defeat merging when edges flow both ways
+
+When accumulating edges into a dict keyed by `(src, dst)`, edges that flow in opposite directions between the same two nodes produce **different keys**: `(A, B)` vs `(B, A)`. If reads flow backward through a chain (`SCHEMA→DATABASE→WAREHOUSE→CLIENT`) while writes flow forward (`CLIENT→WAREHOUSE→DATABASE→SCHEMA`), an accumulator keyed by `(src, dst)` will never merge them — even when the intent is "one edge per node pair."
+
+The fix is to normalize the key to a canonical sorted pair when merging bidirectional edges:
+
+```python
+if combine_rw:
+    key = (min(src, dst), max(src, dst))  # canonical pair
+else:
+    key = (src, dst, is_write)  # direction-aware
+```
+
+This ensures `(A, B)` and `(B, A)` map to the same dict entry. When using a canonical key, also consider removing directional arrows from the rendered edge and using a bidirectional indicator (`↔`) in tooltips, since the edge no longer represents a single direction.

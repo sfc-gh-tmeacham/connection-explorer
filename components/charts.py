@@ -617,51 +617,62 @@ def render_bar_charts(df: pd.DataFrame) -> None:
 
     is_dark = is_dark_theme()
     grid_color = "rgba(255,255,255,0.18)" if is_dark else "rgba(0,0,0,0.10)"
-
-    client_data = prepare_chart_data(df, "CLIENT")
-    db_data = prepare_chart_data(df, "DATABASE")
-    wh_data = prepare_chart_data(df, "WAREHOUSE")
-
-    col1, col2 = st.columns(2)
-    with col1:
-        fig = _build_bar_chart(client_data, "CLIENT", grid_color)
-        if fig:
-            st.plotly_chart(fig, width="stretch")
-    with col2:
-        fig = _build_bar_chart(db_data, "DATABASE", grid_color)
-        if fig:
-            st.plotly_chart(fig, width="stretch")
-
     has_schema = "SCHEMA_NAME" in df.columns
-    col3, col4 = st.columns(2)
-    with col3:
-        if has_schema:
-            schema_data = prepare_chart_data(df, "SCHEMA_NAME")
-            fig = _build_bar_chart(schema_data, "SCHEMA_NAME", grid_color)
+
+    tab_bar, tab_heat, tab_tree, tab_sankey = st.tabs(
+        [
+            ":material/bar_chart: Bar Charts",
+            ":material/grid_on: Heatmaps",
+            ":material/account_tree: Treemap",
+            ":material/swap_horiz: Sankey",
+        ]
+    )
+
+    with tab_bar:
+        client_data = prepare_chart_data(df, "CLIENT")
+        db_data = prepare_chart_data(df, "DATABASE")
+        wh_data = prepare_chart_data(df, "WAREHOUSE")
+
+        col1, col2 = st.columns(2)
+        with col1:
+            fig = _build_bar_chart(client_data, "CLIENT", grid_color)
             if fig:
                 st.plotly_chart(fig, width="stretch")
-    with col4:
-        fig = _build_bar_chart(wh_data, "WAREHOUSE", grid_color)
+        with col2:
+            fig = _build_bar_chart(db_data, "DATABASE", grid_color)
+            if fig:
+                st.plotly_chart(fig, width="stretch")
+
+        col3, col4 = st.columns(2)
+        with col3:
+            if has_schema:
+                schema_data = prepare_chart_data(df, "SCHEMA_NAME")
+                fig = _build_bar_chart(schema_data, "SCHEMA_NAME", grid_color)
+                if fig:
+                    st.plotly_chart(fig, width="stretch")
+        with col4:
+            fig = _build_bar_chart(wh_data, "WAREHOUSE", grid_color)
+            if fig:
+                st.plotly_chart(fig, width="stretch")
+
+    with tab_heat:
+        fig = _build_heatmap(df, grid_color, "DATABASE", "CLIENT")
         if fig:
             st.plotly_chart(fig, width="stretch")
 
-    # Heatmaps
-    fig = _build_heatmap(df, grid_color, "DATABASE", "CLIENT")
-    if fig:
-        st.plotly_chart(fig, width="stretch")
+        if has_schema:
+            fig = _build_heatmap(df, grid_color, "SCHEMA_NAME", "CLIENT")
+            if fig:
+                st.plotly_chart(fig, width="stretch")
 
-    if has_schema:
-        fig = _build_heatmap(df, grid_color, "SCHEMA_NAME", "CLIENT")
+        fig = _build_heatmap(df, grid_color, "WAREHOUSE", "CLIENT")
         if fig:
             st.plotly_chart(fig, width="stretch")
 
-    fig = _build_heatmap(df, grid_color, "WAREHOUSE", "CLIENT")
-    if fig:
-        st.plotly_chart(fig, width="stretch")
+    with tab_tree:
+        fig = _build_treemap(df)
+        if fig:
+            st.plotly_chart(fig, width="stretch")
 
-    # Treemap
-    fig = _build_treemap(df)
-    if fig:
-        st.plotly_chart(fig, width="stretch")
-
-    render_sankey(df)
+    with tab_sankey:
+        render_sankey(df)

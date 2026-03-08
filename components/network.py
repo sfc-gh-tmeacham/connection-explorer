@@ -1023,7 +1023,8 @@ def render_network(df: pd.DataFrame, _node_images: Dict[str, str],
                    hide_clients: bool = False,
                    hide_databases: bool = False,
                    hide_schemas: bool = False,
-                   cluster_databases: bool = False):
+                   cluster_databases: bool = False,
+                   combine_rw: bool = False):
     """Build and render the interactive network graph as a v2 component.
 
     Aggregates the access DataFrame, computes per-node statistics, then
@@ -1083,19 +1084,32 @@ def render_network(df: pd.DataFrame, _node_images: Dict[str, str],
     }
     shape_props = {"useBorderWithImage": True, "borderType": "circle"}
 
-    # Accumulator for deduplicating edges: (src, dst, is_write) → {ac, path_indices}
+    # Accumulator for deduplicating edges.
+    # When combine_rw is False: key = (src, dst, is_write) → at most 2 edges per pair.
+    # When combine_rw is True:  key = (min(src,dst), max(src,dst)) → canonical pair
+    #   so reads (B→A) and writes (A→B) merge into one edge per node pair.
     edge_acc: Dict[tuple, dict] = {}
 
     def _accumulate_edge(src, dst, ac, is_write, path_idx):
-        """Accumulate edge data, merging duplicates by (src, dst, direction)."""
-        key = (src, dst, is_write)
+        """Accumulate edge data, merging duplicates by key."""
+        if combine_rw:
+            # Normalize to canonical (min, max) pair so reads and writes
+            # between the same two nodes merge into one edge.
+            key = (min(src, dst), max(src, dst))
+        else:
+            key = (src, dst, is_write)
         if key in edge_acc:
             edge_acc[key]["ac"] += ac
             edge_acc[key]["path_indices"].append(path_idx)
         else:
+            if combine_rw:
+                color = SNOWFLAKE_BLUE
+            else:
+                color = AMBER if is_write else READ_GREEN
             edge_acc[key] = {
                 "ac": ac,
-                "color": AMBER if is_write else READ_GREEN,
+                "color": color,
+                "is_write": is_write,
                 "path_indices": [path_idx],
             }
 
@@ -1207,17 +1221,27 @@ def render_network(df: pd.DataFrame, _node_images: Dict[str, str],
                 for i in range(len(chain) - 1, 0, -1):
                     _accumulate_edge(chain[i], chain[i - 1], ac, is_write, path_idx)
 
-    # Build final edges list from the accumulator — at most 2 edges
-    # (1 read + 1 write) between any pair of nodes.
-    for (src, dst, is_write), info in edge_acc.items():
-        dir_label = "WRITE" if is_write else "READ"
-        edge_title = f"{src} → {dst}\nDirection: {dir_label}\nAccess Count: {info['ac']:,}"
-        edges.append({
+    # Build final edges list from the accumulator.
+    for key, info in edge_acc.items():
+        if combine_rw:
+            src, dst = key
+            dir_label = "ALL"
+        else:
+            src, dst, is_write = key
+            dir_label = "WRITE" if is_write else "READ"
+        if combine_rw:
+            edge_title = f"{src} ↔ {dst}\nDirection: {dir_label}\nAccess Count: {info['ac']:,}"
+        else:
+            edge_title = f"{src} → {dst}\nDirection: {dir_label}\nAccess Count: {info['ac']:,}"
+        edge_data = {
             "id": f"e{len(edges)}", "from": src, "to": dst,
-            "value": info["ac"], "color": info["color"], "arrows": "to",
+            "value": info["ac"], "color": info["color"],
             "arrowStrikethrough": False, "title": edge_title,
             "pathIndices": info["path_indices"],
-        })
+        }
+        if not combine_rw:
+            edge_data["arrows"] = "to"
+        edges.append(edge_data)
 
     clusters = {label: members for label, members in cluster_members.items() if members}
 

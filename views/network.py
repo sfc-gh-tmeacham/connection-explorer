@@ -23,14 +23,14 @@ def run():
     node_images = load_node_images()
     session = st.session_state.get("snowflake_session")
 
-    title_col, toggle_col, btn_col = st.columns([5, 4.5, 0.5])
+    title_col, toggle_col, btn_col = st.columns([3, 6.5, 0.5])
     with title_col:
         st.markdown(
             '<div style="padding-left: 50px;"><span class="network-title">Network Graph</span></div>',
             unsafe_allow_html=True,
         )
     with toggle_col:
-        tc1, tc2, tc3, tc4, tc5 = st.columns(5)
+        tc1, tc2, tc3, tc4, tc5, tc6 = st.columns(6)
 
         # Read current hide states to enforce "at least 2 visible" constraint.
         # If two are already hidden, the others are disabled.
@@ -70,6 +70,11 @@ def run():
                 "Cluster Databases", key="cluster_databases",
                 help="Group schema nodes under their parent database",
             )
+        with tc6:
+            combine_rw = st.checkbox(
+                "Combine R/W", key="combine_rw", value=True,
+                help="Merge read and write edges into a single line per node pair, showing the combined access count in blue instead of separate green (read) and amber (write) arrows",
+            )
     with btn_col:
         st.markdown('<div class="fullscreen-btn-container"></div>', unsafe_allow_html=True)
         if st.button("", help="Full Screen", icon=":material/fullscreen:"):
@@ -80,6 +85,7 @@ def run():
         df, node_images, session,
         fullscreen=False, hide_warehouses=hide_wh, hide_clients=hide_cl,
         hide_databases=hide_db, hide_schemas=hide_sc, cluster_databases=cluster_db,
+        combine_rw=combine_rw,
     )
 
     st.caption("Excludes CALL statements, application function calls, session/transaction commands, system processes, and temporary objects.")
