@@ -1,12 +1,20 @@
-definition_version: 1
-streamlit:
-  name: SNOWFLAKE_DATA_LAKE_EXPLORER
-  title: "Snowflake Data Lake Explorer"
-  stage: SNOWFLAKE_DATA_LAKE.DATA_LAKE_ACCESS.STREAMLIT_STAGE
-  main_file: streamlit_app.py
-  query_warehouse: COMPUTE_WH
-  additional_source_files:
-    - static/snowflake-bug-logo.png
-    - static/snowflake-database.png
-    - static/snowflake-warehouse.png
-    - environment.yml
+definition_version: 2
+entities:
+  connection_explorer:
+    type: streamlit
+    identifier: SNOWFLAKE_CONNECTION_EXPLORER
+    title: "Snowflake Connection Explorer"
+    query_warehouse: CONNECTION_EXPLORER_WH
+    compute_pool: STREAMLIT_COMPUTE_POOL
+    runtime_name: SYSTEM$ST_CONTAINER_RUNTIME_PY3_11
+    external_access_integrations:
+      - PYPI_ACCESS_INTEGRATION
+    main_file: streamlit_app.py
+    artifacts:
+      - streamlit_app.py
+      - pyproject.toml
+      - .streamlit/config.toml
+      - components/*.py
+      - views/*.py
+      - static/*.svg
+      - static/client-icons/*.svg
