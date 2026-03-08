@@ -1,9 +1,9 @@
-name: streamlit-data-lake-explorer
+name: streamlit-connection-explorer
 channels:
 dependencies:
   - streamlit
   - pandas
-  - altair
+  - plotly
   - pillow
   - pyvis
   - networkx
