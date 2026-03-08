@@ -38,7 +38,7 @@ except Exception:
 # on first load.  Users can expand it to access filters.
 st.set_page_config(
     page_title="Snowflake Connection Explorer",
-    page_icon=str(FAVICON_PATH),
+    page_icon=":material/hub:",
     layout="wide",
     initial_sidebar_state="collapsed",
     menu_items={
@@ -323,6 +323,7 @@ def main():
     from views.charts import run as charts_page
     from views.data import run as data_page
     from views.classifications import run as classifications_page
+    from views.about import run as about_page
 
     pg = st.navigation(
         [
@@ -330,6 +331,7 @@ def main():
             st.Page(charts_page, title="Charts", url_path="charts", icon=":material/bar_chart:"),
             st.Page(data_page, title="Data", url_path="data", icon=":material/table_view:"),
             st.Page(classifications_page, title="Classifications", url_path="classifications", icon=":material/label:"),
+            st.Page(about_page, title="About", url_path="about", icon=":material/bolt:"),
         ],
         position="top",
     )

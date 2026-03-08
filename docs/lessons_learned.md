@@ -481,3 +481,7 @@ else:
 ```
 
 This ensures `(A, B)` and `(B, A)` map to the same dict entry. When using a canonical key, also consider removing directional arrows from the rendered edge and using a bidirectional indicator (`↔`) in tooltips, since the edge no longer represents a single direction.
+
+## Container Runtime Streamlit apps have no user-accessible stage
+
+For Streamlit apps using SPCS Container Runtime (`runtime_name: SYSTEM$ST_CONTAINER_RUNTIME_*`), files are stored on an internal managed stage (`snow://streamlit/<db>.<schema>.<name>/versions/live`) that is **not** accessible via `PUT`, `LIST`, or `snow stage copy`. The `snow streamlit deploy --replace` command (which issues `CREATE OR REPLACE`) is the only supported deployment method. The `snow stage copy` workaround for updating files without `CREATE OR REPLACE` only works for classic SiS apps that use a named user stage.

@@ -121,16 +121,21 @@ def load_node_images() -> Dict[str, str]:
 def render_snowflake_header() -> None:
     """Render the app header with the Snowflake Connection Explorer title.
 
-    Injects an ``unsafe_allow_html`` markdown block containing the app title
-    styled with Snowflake brand colors.
+    Uses gradient text matching the section-title style on the About page.
     """
+    from components.theme import SNOWFLAKE_BLUE, STAR_BLUE
 
     st.markdown(
-        '''
+        f'''
         <div style="padding: 0.25rem 0; padding-left: 50px;">
-            <h1 style="font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-size: 32px; font-weight: 900; 
-                       color: inherit; letter-spacing: 0.02em; line-height: 1.2; 
-                       margin: 0; padding: 0; text-align: left;">
+            <h1 style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+                       font-size: 32px; font-weight: 900;
+                       letter-spacing: 0.02em; line-height: 1.2;
+                       margin: 0; padding: 0; text-align: left;
+                       background: linear-gradient(135deg, {SNOWFLAKE_BLUE}, {STAR_BLUE});
+                       -webkit-background-clip: text;
+                       -webkit-text-fill-color: transparent;
+                       background-clip: text;">
                 Snowflake Connection Explorer
             </h1>
         </div>
