@@ -482,6 +482,18 @@ else:
 
 This ensures `(A, B)` and `(B, A)` map to the same dict entry. When using a canonical key, also consider removing directional arrows from the rendered edge and using a bidirectional indicator (`↔`) in tooltips, since the edge no longer represents a single direction.
 
+## Streamlit Community Cloud Deployment
+
+### Community Cloud reads `requirements.txt`, not `pyproject.toml`
+
+Streamlit Community Cloud installs dependencies exclusively from `requirements.txt` in the repo root. It does **not** read `pyproject.toml`, `setup.py`, or `setup.cfg`. If your project uses `pyproject.toml` for dependency management (e.g., with `uv`), you must also maintain a `requirements.txt` for Community Cloud deployments. Without it, any package not bundled with Streamlit's base environment (e.g., `plotly`, `pyvis`) will fail with `ModuleNotFoundError`.
+
+### `ui.sidebarDefaultState` was removed in newer Streamlit versions
+
+The `.streamlit/config.toml` option `[ui] sidebarDefaultState` is no longer valid in recent Streamlit versions (including what Community Cloud runs). It produces a warning on startup but does not crash the app. Use `st.set_page_config(initial_sidebar_state="expanded")` in Python code instead.
+
+---
+
 ## Container Runtime Streamlit apps have no user-accessible stage
 
 For Streamlit apps using SPCS Container Runtime (`runtime_name: SYSTEM$ST_CONTAINER_RUNTIME_*`), files are stored on an internal managed stage (`snow://streamlit/<db>.<schema>.<name>/versions/live`) that is **not** accessible via `PUT`, `LIST`, or `snow stage copy`. The `snow streamlit deploy --replace` command (which issues `CREATE OR REPLACE`) is the only supported deployment method. The `snow stage copy` workaround for updating files without `CREATE OR REPLACE` only works for classic SiS apps that use a named user stage.

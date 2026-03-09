@@ -1,0 +1,6 @@
+streamlit>=1.55.0
+pandas>=2.0.0
+plotly>=5.0.0
+pyvis>=0.3.2
+pillow>=10.0.0
+snowflake-snowpark-python>=1.11.0
