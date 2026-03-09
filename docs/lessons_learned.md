@@ -492,6 +492,12 @@ Streamlit Community Cloud installs dependencies exclusively from `requirements.t
 
 The `.streamlit/config.toml` option `[ui] sidebarDefaultState` is no longer valid in recent Streamlit versions (including what Community Cloud runs). It produces a warning on startup but does not crash the app. Use `st.set_page_config(initial_sidebar_state="expanded")` in Python code instead.
 
+### Avoid wildcard re-exports of heavy modules in `__init__.py`
+
+Wildcard re-exports (`from components.charts import *`) in a package's `__init__.py` create a fragile import chain: **any** import from that package eagerly loads every re-exported module and all its transitive dependencies. If `charts.py` imports `plotly`, then even `from components.assets import FAVICON_PATH` triggers `import plotly`, crashing the app if plotly is missing.
+
+Prefer direct imports (`from components.charts import render_bar_charts`) in the modules that actually need them, and only re-export lightweight, universally-needed symbols from `__init__.py`.
+
 ---
 
 ## Container Runtime Streamlit apps have no user-accessible stage
