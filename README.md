@@ -17,6 +17,7 @@
 - [Running Locally](#running-locally)
 - [Deploying to Snowflake](#deploying-to-snowflake-streamlit-in-snowflake)
   - [Prerequisites](#prerequisites-all-methods)
+  - [Configuration](#configuration-required-before-deploying)
   - [Option 1: Quick Deploy with Snowflake CLI](#option-1-quick-deploy-with-snowflake-cli-recommended)
   - [Option 2: Manual Deploy with Snowflake CLI](#option-2-manual-deploy-with-snowflake-cli)
   - [Option 3: Deploy via Snowsight](#option-3-deploy-via-snowsight-no-cli-required)
@@ -130,18 +131,34 @@ The app will open in your browser at `http://localhost:8501`
 - A role with privileges to create databases, warehouses, compute pools, and integrations (default: `ACCOUNTADMIN`). See [Roles and Privileges](#roles-and-privileges) for details.
 - `IMPORTED PRIVILEGES` on the shared `SNOWFLAKE` database (for `account_usage` views).
 
-**Review deployment variables** before running the setup SQL. Open `deploy/snowflake_data_set_up.sql` and check the variables at the top:
+### Configuration (Required Before Deploying)
 
-```sql
-SET DB_NAME = 'CONNECTION_EXPLORER_APP_DB';        -- Database name
-SET WH_NAME = 'CONNECTION_EXPLORER_WH';            -- Query warehouse
-SET COMPUTE_POOL_NAME = 'STREAMLIT_COMPUTE_POOL';  -- Compute pool for container runtime
-SET EAI_NAME = 'PYPI_ACCESS_INTEGRATION';          -- External access integration for PyPI
-SET DEPLOY_ROLE = 'ACCOUNTADMIN';                  -- Role that runs the setup
-SET APP_OWNER_ROLE = 'SYSADMIN';                   -- Role that owns the app at runtime
+Deployment is driven by two files that **must stay in sync**:
+
+| File | Purpose |
+|------|---------|
+| `deploy/snowflake_data_set_up.sql` | SQL `SET` variables — controls what Snowflake creates |
+| `deploy/deploy.conf` | Shell variables — controls what the deploy/uninstall scripts reference |
+
+> **You must update both files if you change any value.** If they are out of sync, the deploy scripts will reference objects that don't exist or use wrong names.
+
+**Step 1 — Create `deploy.conf`:**
+```bash
+cp deploy/deploy.conf.example deploy/deploy.conf
 ```
 
-> **Important:** If you change `WH_NAME`, `COMPUTE_POOL_NAME`, or `EAI_NAME`, you must also update the matching values in `snowflake.yml` (`query_warehouse`, `compute_pool`, and `external_access_integrations`). The deploy scripts (`deploy.sh` / `deploy.bat`) also hardcode the database name and schema — update those too if you change `DB_NAME`.
+**Step 2 — Review and update the variables** in both files. The defaults are:
+
+| Variable | Default Value | Also update in |
+|----------|---------------|----------------|
+| `DB_NAME` | `CONNECTION_EXPLORER_APP_DB` | `deploy.conf` + SQL |
+| `SCHEMA_NAME` | `APP` | `deploy.conf` + SQL |
+| `WH_NAME` | `CONNECTION_EXPLORER_WH` | `deploy.conf` + SQL + `snowflake.yml` |
+| `COMPUTE_POOL_NAME` | `STREAMLIT_COMPUTE_POOL` | `deploy.conf` + SQL + `snowflake.yml` |
+| `EAI_NAME` | `PYPI_ACCESS_INTEGRATION` | `deploy.conf` + SQL + `snowflake.yml` |
+| `APP_OWNER_ROLE` | `SYSADMIN` | `deploy.conf` + SQL |
+| `APP_NAME` | `SNOWFLAKE_CONNECTION_EXPLORER` | `deploy.conf` only (not in SQL) |
+| `DEPLOY_ROLE` | `ACCOUNTADMIN` | SQL only (not in `deploy.conf`) |
 
 **What the setup SQL creates:**
 - Database, schema, warehouse, compute pool, and external access integration
@@ -157,7 +174,7 @@ SET APP_OWNER_ROLE = 'SYSADMIN';                   -- Role that owns the app at 
 
 ### Option 1: Quick Deploy with Snowflake CLI (Recommended)
 
-The fastest path. Requires [Snowflake CLI](https://docs.snowflake.com/en/developer-guide/snowflake-cli) v3.14+.
+The fastest path. Requires [Snowflake CLI](https://docs.snowflake.com/en/developer-guide/snowflake-cli) v3.14+. Complete the [Configuration](#configuration-required-before-deploying) steps above first.
 
 **Step 1:** Configure your Snowflake connection (one-time):
 ```bash
@@ -171,7 +188,12 @@ snow connection add
 ./deploy/deploy.sh <connection_name>
 ```
 
-*Windows:*
+*Windows (PowerShell):*
+```powershell
+.\deploy\deploy.ps1 -Connection <connection_name>
+```
+
+*Windows (CMD):*
 ```cmd
 deploy\deploy.bat <connection_name>
 ```
@@ -187,18 +209,16 @@ The script will:
 
 ### Option 2: Manual Deploy with Snowflake CLI
 
-For more control over each step. Requires [Snowflake CLI](https://docs.snowflake.com/en/developer-guide/snowflake-cli) v3.14+.
+For more control over each step. Requires [Snowflake CLI](https://docs.snowflake.com/en/developer-guide/snowflake-cli) v3.14+. Complete the [Configuration](#configuration-required-before-deploying) steps above first.
 
-**Step 1:** Review and edit the variables in `deploy/snowflake_data_set_up.sql` (see [Prerequisites](#prerequisites-all-methods) above).
-
-**Step 2:** Run the setup SQL to create infrastructure and load data:
+**Step 1:** Run the setup SQL to create infrastructure and load data:
 ```bash
 snow sql --connection <connection_name> \
     --filename deploy/snowflake_data_set_up.sql \
     --warehouse CONNECTION_EXPLORER_WH
 ```
 
-**Step 3:** Deploy the Streamlit app (uses `snowflake.yml` for container runtime settings):
+**Step 2:** Deploy the Streamlit app (uses `snowflake.yml` for container runtime settings):
 ```bash
 snow streamlit deploy \
     --connection <connection_name> \
@@ -207,31 +227,29 @@ snow streamlit deploy \
     --replace
 ```
 
-**Step 4:** Grant the app owner role access to the deployed app:
+**Step 3:** Grant the app owner role access to the deployed app:
 ```bash
 snow sql --connection <connection_name> \
     --warehouse CONNECTION_EXPLORER_WH \
     --query "GRANT USAGE ON STREAMLIT CONNECTION_EXPLORER_APP_DB.APP.SNOWFLAKE_CONNECTION_EXPLORER TO ROLE SYSADMIN"
 ```
 
-**Step 5:** Open the app in Snowsight: **Projects** > **Streamlit** > **SNOWFLAKE_CONNECTION_EXPLORER**
+**Step 4:** Open the app in Snowsight: **Projects** > **Streamlit** > **SNOWFLAKE_CONNECTION_EXPLORER**
 
 ---
 
 ### Option 3: Deploy via Snowsight (No CLI Required)
 
-Deploy entirely through the Snowflake web UI. No local tooling needed — just a browser.
+Deploy entirely through the Snowflake web UI. No local tooling needed — just a browser. Complete the [Configuration](#configuration-required-before-deploying) steps above first (you still need to review the SQL variables even if you're not using the CLI scripts).
 
-**Step 1:** Review the variables at the top of `deploy/snowflake_data_set_up.sql` (see [Prerequisites](#prerequisites-all-methods) above). Edit them if needed.
-
-**Step 2:** Run the setup SQL in Snowsight:
+**Step 1:** Run the setup SQL in Snowsight:
 1. Sign in to [Snowsight](https://app.snowflake.com)
 2. Open a **SQL Worksheet**
 3. Set the role to `ACCOUNTADMIN` (or your deploy role)
 4. Paste the contents of `deploy/snowflake_data_set_up.sql` and run all statements
 5. Verify the infrastructure was created: `SHOW TABLES IN CONNECTION_EXPLORER_APP_DB.APP;`
 
-**Step 3:** Create the Streamlit app:
+**Step 2:** Create the Streamlit app:
 1. Navigate to **Projects** > **Streamlit**
 2. Click **+ Streamlit App**
 3. Configure the app:
@@ -262,47 +280,60 @@ Deploy entirely through the Snowflake web UI. No local tooling needed — just a
 
 2. Upload `streamlit_app.py` last (or click **Run** after all files are uploaded) to avoid partial-load errors.
 
-**Step 5:** Add the external access integration for PyPI packages:
+**Step 4:** Add the external access integration for PyPI packages:
 1. In the app editor, click the **vertical ellipsis menu** (upper-right) > **App settings**
 2. Under **External access**, add `PYPI_ACCESS_INTEGRATION`
 3. Click **Save**
 
 The app will reboot and install packages from `pyproject.toml`. This may take a few minutes on first deploy.
 
-**Step 6:** Grant the app owner role access. In a SQL Worksheet:
+**Step 5:** Grant the app owner role access. In a SQL Worksheet:
 ```sql
 GRANT USAGE ON STREAMLIT CONNECTION_EXPLORER_APP_DB.APP.SNOWFLAKE_CONNECTION_EXPLORER TO ROLE SYSADMIN;
 ```
 
-**Step 7:** Verify the app loads at **Projects** > **Streamlit** > **SNOWFLAKE_CONNECTION_EXPLORER**
+**Step 6:** Verify the app loads at **Projects** > **Streamlit** > **SNOWFLAKE_CONNECTION_EXPLORER**
 
 ## Uninstalling
 
-To remove all Connection Explorer objects from your account:
+To remove Connection Explorer objects from your account. By default, the uninstall scripts drop app-level objects (Streamlit app, task, procedure, tables, stage) but **keep the database and schema** intact. Use flags to escalate.
+
+The scripts require `deploy/deploy.conf` (same file used for deployment) to know which objects to drop.
 
 **Mac/Linux:**
 ```bash
+# Remove app objects only (keeps database and schema)
 ./deploy/uninstall.sh <connection_name>
 
-# To keep the database but remove everything else:
-./deploy/uninstall.sh <connection_name> --keep-database
+# Also drop the schema
+./deploy/uninstall.sh <connection_name> --drop-schema
+
+# Drop everything including the database
+./deploy/uninstall.sh <connection_name> --drop-database
 ```
 
 **Windows:**
 ```cmd
+REM Remove app objects only (keeps database and schema)
 deploy\uninstall.bat <connection_name>
 
-REM To keep the database but remove everything else:
-deploy\uninstall.bat <connection_name> --keep-database
+REM Also drop the schema
+deploy\uninstall.bat <connection_name> --drop-schema
+
+REM Drop everything including the database
+deploy\uninstall.bat <connection_name> --drop-database
 ```
+
+Before executing, the script shows every action it will take (`DROP` or `KEEP` for each object) and requires confirmation.
 
 This will remove:
 - Streamlit app
 - Scheduled refresh task
 - Stored procedure
-- Data table
+- Data tables
 - Stage
-- Schema (and optionally the database)
+- Schema (with `--drop-schema` or `--drop-database`)
+- Database (with `--drop-database` only)
 
 ## Architecture: Connection Strategy
 
@@ -360,8 +391,9 @@ data-lake-explorer/
 │   └── snowflake-bug-logo.*      # Snowflake logo
 ├── deploy/                       # Deployment and infrastructure scripts
 │   ├── snowflake_data_set_up.sql # Database/schema/task setup script
-│   ├── deploy.sh / deploy.bat   # Deployment scripts
-│   └── uninstall.sh / uninstall.bat  # Uninstall scripts
+│   ├── deploy.conf.example       # Configuration template (copy to deploy.conf)
+│   ├── deploy.sh / deploy.bat / deploy.ps1  # Deployment scripts
+│   └── uninstall.sh / uninstall.bat         # Uninstall scripts
 ├── snowflake.yml                 # Snowflake CLI deployment config
 ├── pyproject.toml                # Python project config and dependencies
 ├── docs/                         # Developer documentation and lessons learned
@@ -399,7 +431,7 @@ These resources must exist **before** deployment:
 
 #### Customizing Resource Names
 
-All resource names are configurable via variables at the top of `deploy/snowflake_data_set_up.sql`. See [Prerequisites (All Methods)](#prerequisites-all-methods) for the full list and instructions on keeping `snowflake.yml` and deploy scripts in sync.
+All resource names are configurable via variables at the top of `deploy/snowflake_data_set_up.sql`. If you change any value there, update the matching entry in `deploy/deploy.conf` so the deploy and uninstall scripts stay in sync. See [Prerequisites (All Methods)](#prerequisites-all-methods) for the full variable list.
 
 ### Roles and Privileges
 

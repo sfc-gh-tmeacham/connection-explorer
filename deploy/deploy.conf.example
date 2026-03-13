@@ -1,0 +1,30 @@
+# =============================================================================
+# Snowflake Connection Explorer - Deployment Configuration
+#
+# Copy this file to deploy.conf and customize values as needed:
+#
+#   cp deploy.conf.example deploy.conf
+#
+# IMPORTANT: These values must match the corresponding SET variables in
+# snowflake_data_set_up.sql. If you change a value here, update the SQL
+# script to match, otherwise the deploy/uninstall scripts will reference
+# objects that don't exist.
+#
+#   deploy.conf variable    -->  snowflake_data_set_up.sql variable
+#   ─────────────────────        ──────────────────────────────────
+#   DB_NAME                 -->  SET DB_NAME = '...'
+#   SCHEMA_NAME             -->  SET SCHEMA_NAME = '...'
+#   WH_NAME                 -->  SET WH_NAME = '...'
+#   COMPUTE_POOL_NAME       -->  SET COMPUTE_POOL_NAME = '...'
+#   EAI_NAME                -->  SET EAI_NAME = '...'
+#   APP_OWNER_ROLE          -->  SET APP_OWNER_ROLE = '...'
+#
+# =============================================================================
+
+DB_NAME=CONNECTION_EXPLORER_APP_DB
+SCHEMA_NAME=APP
+WH_NAME=CONNECTION_EXPLORER_WH
+APP_NAME=SNOWFLAKE_CONNECTION_EXPLORER
+COMPUTE_POOL_NAME=STREAMLIT_COMPUTE_POOL
+EAI_NAME=PYPI_ACCESS_INTEGRATION
+APP_OWNER_ROLE=SYSADMIN

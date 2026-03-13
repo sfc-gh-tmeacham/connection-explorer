@@ -65,6 +65,7 @@ venv.bak/
 # Snowflake
 connection.json
 connection*.json
+deploy/deploy.conf
 *.pem
 *.p8
 output/
